@@ -9,172 +9,250 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 :root {
-  --bg:#f5f7fa;--surface:#ffffff;--surface2:#f8f9fb;--border:#e1e4e8;--border2:#d1d5db;
-  --text:#1f2937;--text2:#6b7280;--text3:#9ca3af;
-  --accent:#2563eb;--accent-bg:#eff6ff;
-  --warn:#f59e0b;--warn-bg:#fffbeb;
-  --success:#10b981;--success-bg:#ecfdf5;
-  --danger:#ef4444;--danger-bg:#fef2f2;
-  --proj:#4f46e5;--proj-bg:#eef2ff;
-  --act:#7c3aed;--act-bg:#f5f3ff;
-  --task:#0891b2;--task-bg:#ecfeff;
-  --gantt-today:#ef4444;
-  --radius:8px;--radius-lg:12px;
-  --shadow:0 1px 3px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.05);
-  --shadow-md:0 4px 16px rgba(0,0,0,0.1),0 2px 6px rgba(0,0,0,0.06);
+  /* Paleta: gris slate fría + azul institucional + verde avance */
+  --bg:#eef1f5;
+  --surface:#ffffff;
+  --surface2:#f4f6f9;
+  --surface3:#e8ecf2;
+  --border:#dde2ea;
+  --border2:#c8cfd9;
+  --text:#18212f;
+  --text2:#5a6478;
+  --text3:#8c97aa;
+  --accent:#1b5fe8;
+  --accent-hover:#1449c4;
+  --accent-bg:#e8f0fd;
+  --accent-bg2:#dbe8fc;
+  --warn:#d97706;
+  --warn-bg:#fef3cd;
+  --success:#059669;
+  --success-bg:#d1fae5;
+  --danger:#dc2626;
+  --danger-bg:#fee2e2;
+  --proj:#4338ca;    --proj-bg:#ede9fe;
+  --act:#7c3aed;     --act-bg:#f3f0ff;
+  --task:#0e7490;    --task-bg:#cffafe;
+  --gantt-today:#f43f5e;
+  --gantt-grid:rgba(0,0,0,.05);
+  --radius:7px;
+  --radius-lg:11px;
+  --radius-xl:16px;
+  --shadow:0 1px 4px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 20px rgba(0,0,0,.09),0 2px 6px rgba(0,0,0,.05);
+  --shadow-lg:0 8px 32px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.06);
+  --header-h:54px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:16px;line-height:1.5;min-height:100vh}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;min-height:100vh}
 .shell{display:flex;flex-direction:column;min-height:100vh}
-/* LOGIN */
-.login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);display:flex;align-items:center;justify-content:center;z-index:1000}
-.login-box{background:var(--surface);border-radius:var(--radius-lg);padding:40px;width:420px;max-width:90vw;box-shadow:0 8px 24px rgba(0,0,0,.2)}
-.login-box h2{font-size:24px;margin-bottom:8px;color:var(--text)}
-.login-box p{font-size:14px;color:var(--text2);margin-bottom:24px}
-.login-error{background:var(--danger-bg);color:var(--danger);padding:10px;border-radius:var(--radius);font-size:13px;margin-bottom:16px;display:none}
-.login-success{background:var(--success-bg);color:var(--success);padding:10px;border-radius:var(--radius);font-size:13px;margin-bottom:16px;display:none}
-.toggle-auth{font-size:13px;color:var(--accent);text-align:center;margin-top:20px;cursor:pointer;font-weight:500}
+
+/* ── LOGIN ─────────────────────────────────────────── */
+.login-screen{position:fixed;inset:0;background:linear-gradient(145deg,#0f2358 0%,#1b5fe8 55%,#4338ca 100%);display:flex;align-items:center;justify-content:center;z-index:1000}
+.login-screen::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
+.login-box{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);border-radius:var(--radius-xl);padding:44px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.28),0 4px 16px rgba(0,0,0,.12);position:relative;z-index:1}
+.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
+.login-logo-mark{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--proj));border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:800;letter-spacing:-.02em;flex-shrink:0}
+.login-logo-text{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.01em;line-height:1.2}
+.login-logo-text small{display:block;font-size:11px;font-weight:400;color:var(--text2);letter-spacing:0}
+.login-box h2{font-size:22px;font-weight:700;margin-bottom:6px;color:var(--text);letter-spacing:-.02em}
+.login-box p{font-size:13px;color:var(--text2);margin-bottom:24px}
+.login-error{background:var(--danger-bg);color:var(--danger);padding:10px 12px;border-radius:var(--radius);font-size:13px;margin-bottom:14px;display:none;border:1px solid #fca5a5}
+.login-success{background:var(--success-bg);color:var(--success);padding:10px 12px;border-radius:var(--radius);font-size:13px;margin-bottom:14px;display:none;border:1px solid #6ee7b7}
+.toggle-auth{font-size:13px;color:var(--accent);text-align:center;margin-top:18px;cursor:pointer;font-weight:500}
 .toggle-auth:hover{text-decoration:underline}
-/* HEADER */
-header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:14px;height:56px;position:sticky;top:0;z-index:50}
-.logo{font-size:13px;font-weight:700;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;flex-shrink:0}
-.h-title{font-size:14px;font-weight:500;color:var(--text);flex-shrink:0}
+
+/* ── HEADER ─────────────────────────────────────────── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:12px;height:var(--header-h);position:sticky;top:0;z-index:50;box-shadow:0 1px 0 var(--border),0 2px 8px rgba(0,0,0,.04)}
+.logo-mark{width:30px;height:30px;background:linear-gradient(135deg,var(--accent),var(--proj));border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;letter-spacing:-.02em}
+.h-title{font-size:13px;font-weight:500;color:var(--text2);flex-shrink:0}
+.h-divider{width:1px;height:18px;background:var(--border);flex-shrink:0}
 .spacer{flex:1}
-.header-actions{display:flex;gap:6px;align-items:center}
-.user-info{display:flex;align-items:center;gap:8px;padding:4px 10px;background:var(--surface2);border-radius:var(--radius);font-size:13px}
-.user-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
-/* LAYOUT */
-.main{flex:1;padding:20px 24px;display:flex;flex-direction:column;gap:16px;max-width:1600px;margin:0 auto;width:100%}
-/* BUTTONS */
-.btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;font-size:14px;font-family:inherit;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer;transition:all .13s;white-space:nowrap;font-weight:400}
-.btn:hover{background:var(--surface2)}
+.header-actions{display:flex;gap:5px;align-items:center}
+.user-info{display:flex;align-items:center;gap:7px;padding:4px 10px 4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:default}
+.user-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--proj));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+
+/* ── LAYOUT ─────────────────────────────────────────── */
+.main{flex:1;padding:18px 22px;display:flex;flex-direction:column;gap:14px;max-width:1680px;margin:0 auto;width:100%}
+
+/* ── BUTTONS ─────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 13px;font-size:13px;font-family:inherit;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;transition:all .12s;white-space:nowrap;font-weight:500}
+.btn:hover{background:var(--surface2);color:var(--text);border-color:var(--border2)}
 .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-.btn-primary:hover{background:#1d4ed8;border-color:#1d4ed8}
-.btn-sm{height:28px;padding:0 10px;font-size:13px}
-.btn-ghost{border-color:transparent;background:transparent}
-.btn-ghost:hover{background:var(--surface2);border-color:var(--border)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff}
+.btn-sm{height:26px;padding:0 9px;font-size:12px}
+.btn-ghost{border-color:transparent;background:transparent;color:var(--text2)}
+.btn-ghost:hover{background:var(--surface2);border-color:var(--border);color:var(--text)}
 .btn-danger{color:var(--danger);border-color:transparent;background:transparent}
-.btn-danger:hover{background:var(--danger-bg)}
+.btn-danger:hover{background:var(--danger-bg);border-color:transparent}
 .btn-success{background:var(--success);color:#fff;border-color:var(--success)}
-/* TABS */
-.tabs{display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:3px}
-.tab{height:30px;padding:0 14px;font-size:14px;font-family:inherit;border:none;background:transparent;color:var(--text2);cursor:pointer;border-radius:6px;transition:all .13s;display:flex;align-items:center;gap:6px}
-.tab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow);font-weight:500}
-/* SUMMARY */
-.summary-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
-.s-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;flex-direction:column;gap:3px}
-.s-label{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-.s-val{font-size:22px;font-weight:600;color:var(--text)}
-.s-sub{font-size:11px;color:var(--text3)}
-/* TOOLBAR */
-.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.toolbar-right{margin-left:auto;display:flex;gap:8px}
-/* PANELS */
+.btn-success:hover{background:#047857;border-color:#047857}
+.btn i{font-size:11px}
+
+/* ── TABS ─────────────────────────────────────────────── */
+.tabs{display:flex;gap:1px;background:var(--surface3);border:1px solid var(--border);border-radius:var(--radius);padding:3px}
+.tab{height:28px;padding:0 12px;font-size:13px;font-family:inherit;border:none;background:transparent;color:var(--text3);cursor:pointer;border-radius:5px;transition:all .12s;display:flex;align-items:center;gap:5px;font-weight:400}
+.tab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow);font-weight:600}
+.tab i{font-size:11px}
+
+/* ── SUMMARY ──────────────────────────────────────────── */
+.summary-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.s-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;flex-direction:column;gap:2px;transition:box-shadow .15s}
+.s-card:hover{box-shadow:var(--shadow-md)}
+.s-label{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.07em}
+.s-val{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-.02em;line-height:1.1}
+.s-sub{font-size:10px;color:var(--text3)}
+.s-accent{color:var(--accent)}
+.s-danger{color:var(--danger)}
+.s-success{color:var(--success)}
+
+/* ── TOOLBAR ─────────────────────────────────────────── */
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toolbar-right{margin-left:auto;display:flex;gap:6px}
+
+/* ── PANELS ─────────────────────────────────────────── */
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)}
-/* TABLE */
+
+/* ── TABLE ──────────────────────────────────────────── */
 .tree-table{width:100%;border-collapse:collapse}
-.tree-table thead tr{background:var(--surface2);border-bottom:1px solid var(--border)}
-.tree-table thead th{padding:10px 12px;font-size:11px;font-weight:600;color:var(--text3);text-align:left;text-transform:uppercase;letter-spacing:.05em;border-right:1px solid var(--border);white-space:nowrap}
+.tree-table thead tr{background:var(--surface2);border-bottom:2px solid var(--border)}
+.tree-table thead th{padding:9px 11px;font-size:10px;font-weight:700;color:var(--text3);text-align:left;text-transform:uppercase;letter-spacing:.07em;border-right:1px solid var(--border);white-space:nowrap}
 .tree-table tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
-.tree-table td{padding:6px 12px;border-right:1px solid var(--border);vertical-align:middle;font-size:14px}
-.editable{background:transparent;border:none;font-family:inherit;font-size:14px;color:var(--text);width:100%;outline:none;padding:3px 5px;border-radius:4px;transition:background .1s}
-.editable:hover{background:var(--surface2)}
-.editable:focus{background:var(--accent-bg);outline:1px solid var(--accent)}
+.tree-table tbody tr:hover{background:var(--surface2)}
+.tree-table td{padding:5px 10px;border-right:1px solid var(--border);vertical-align:middle;font-size:13px}
+.editable{background:transparent;border:1px solid transparent;font-family:inherit;font-size:13px;color:var(--text);width:100%;outline:none;padding:3px 6px;border-radius:5px;transition:all .1s}
+.editable:hover{background:var(--surface2);border-color:var(--border)}
+.editable:focus{background:#fff;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .editable-num{width:52px;text-align:right}
-.name-editable{min-height:26px;line-height:1.4;word-break:break-word;white-space:normal}
-/* DRAG */
+.name-editable{min-height:24px;line-height:1.4;word-break:break-word;white-space:normal}
+
+/* ── DRAG ────────────────────────────────────────────── */
 tr[draggable="true"]{cursor:grab}
 tr[draggable="true"]:active{cursor:grabbing}
 .drag-over{background-color:var(--accent-bg)!important;box-shadow:inset 0 0 0 2px var(--accent)}
-.drag-handle{color:var(--border2);cursor:grab;padding:0 4px;display:inline-flex;align-items:center;opacity:.5;transition:opacity .2s}
-.drag-handle:hover{opacity:1;color:var(--text)}
-/* BADGES */
-.badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;letter-spacing:.03em;white-space:nowrap;flex-shrink:0}
+.drag-handle{color:var(--border2);cursor:grab;padding:0 3px;display:inline-flex;align-items:center;opacity:.4;transition:opacity .15s}
+.drag-handle:hover{opacity:1;color:var(--text3)}
+
+/* ── BADGES ─────────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;letter-spacing:.05em;white-space:nowrap;flex-shrink:0;text-transform:uppercase}
 .badge-proyecto{background:var(--proj-bg);color:var(--proj)}
 .badge-actividad{background:var(--act-bg);color:var(--act)}
 .badge-tarea{background:var(--task-bg);color:var(--task)}
-.name-cell{display:flex;align-items:flex-start;gap:6px;min-width:300px;padding:4px 0}
-.toggle-btn{width:18px;height:18px;border:1px solid var(--border2);background:transparent;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;color:var(--text3)}
-.no-toggle{width:18px;flex-shrink:0}
-.dep-tags{display:flex;flex-wrap:wrap;gap:4px;cursor:pointer;min-width:70px;padding:4px}
+.name-cell{display:flex;align-items:flex-start;gap:5px;min-width:300px;padding:3px 0}
+.toggle-btn{width:17px;height:17px;border:1px solid var(--border2);background:transparent;border-radius:3px;cursor:pointer;font-size:7px;display:flex;align-items:center;justify-content:center;color:var(--text3);flex-shrink:0;transition:background .1s}
+.toggle-btn:hover{background:var(--surface2)}
+.no-toggle{width:17px;flex-shrink:0}
+.dep-tags{display:flex;flex-wrap:wrap;gap:3px;cursor:pointer;min-width:60px;padding:3px}
 .dep-tag{font-size:10px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:2px 5px;color:var(--text2)}
-.dep-add{font-size:11px;color:var(--text3);padding:2px 5px;cursor:pointer;border:1px dashed var(--border2);border-radius:3px}
-.alert-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--danger-bg);color:var(--danger);margin-left:4px;margin-top:3px}
+.dep-add{font-size:10px;color:var(--text3);padding:2px 5px;cursor:pointer;border:1px dashed var(--border2);border-radius:3px}
+.alert-badge{display:inline-flex;align-items:center;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:var(--danger-bg);color:var(--danger);margin-left:4px;text-transform:uppercase;letter-spacing:.04em}
 .warn-badge{background:var(--warn-bg);color:var(--warn)}
 .team-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;background:var(--surface2);border:1px solid var(--border);padding:2px 6px;border-radius:4px;color:var(--text2)}
-/* MODAL */
-.modal-overlay{position:fixed;inset:0;background:rgba(26,25,22,.4);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(2px)}
-.modal{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:24px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-md)}
-.modal h3{font-size:18px;font-weight:600;margin-bottom:16px}
-.form-row{margin-bottom:14px}
-.form-row label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px}
-.form-row input,.form-row select,.form-row textarea{width:100%;height:36px;padding:0 12px;font-size:14px;font-family:inherit;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text);outline:none}
-.form-row input:focus,.form-row select:focus,.form-row textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
-.form-row textarea{height:80px;resize:vertical;padding-top:8px}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
-.checkbox-list{border:1px solid var(--border);border-radius:var(--radius);max-height:250px;overflow-y:auto;background:var(--surface2)}
-.checkbox-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:14px}
-.resp-wrap{border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;min-height:42px;display:flex;flex-wrap:wrap;gap:5px;cursor:default;background:var(--surface)}
-.resp-chip{display:inline-flex;align-items:center;gap:4px;background:var(--accent-bg);color:var(--accent);border-radius:5px;padding:3px 8px;font-size:13px;font-weight:500}
-.resp-chip button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;opacity:.7;width:14px;height:14px;border-radius:50%}
+.file-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--accent-bg2);transition:all .1s}
+.file-badge:hover{background:var(--accent);color:#fff}
+
+/* ── MODAL ─────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(15,35,88,.38);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(3px)}
+.modal{background:var(--surface);border-radius:var(--radius-xl);border:1px solid var(--border);padding:26px;width:540px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal h3{font-size:17px;font-weight:700;margin-bottom:18px;display:flex;align-items:center;gap:8px;letter-spacing:-.01em}
+.form-row{margin-bottom:13px}
+.form-row label{display:block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:5px}
+.form-row input,.form-row select,.form-row textarea{width:100%;height:36px;padding:0 12px;font-size:14px;font-family:inherit;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text);outline:none;transition:border-color .12s,box-shadow .12s}
+.form-row input:focus,.form-row select:focus,.form-row textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.form-row textarea{height:72px;resize:vertical;padding-top:9px;line-height:1.5}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.checkbox-list{border:1px solid var(--border);border-radius:var(--radius);max-height:240px;overflow-y:auto;background:var(--surface2)}
+.checkbox-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px}
+.checkbox-item:hover{background:var(--surface3)}
+.resp-wrap{border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;min-height:40px;display:flex;flex-wrap:wrap;gap:5px;cursor:default;background:var(--surface)}
+.resp-chip{display:inline-flex;align-items:center;gap:4px;background:var(--accent-bg2);color:var(--accent);border-radius:5px;padding:3px 8px;font-size:12px;font-weight:600}
+.resp-chip button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px;opacity:.6;line-height:1}
+.resp-chip button:hover{opacity:1}
 .supp-chip{background:var(--surface2);color:var(--text2);border:1px solid var(--border2)}
-.resp-inner{border:none;outline:none;font-size:14px;font-family:inherit;color:var(--text);background:transparent;flex:1;min-width:150px;height:24px;padding:0;cursor:pointer}
-/* GANTT */
-.gantt-wrap{overflow-x:auto}
-.gantt-container{min-width:900px}
-.gantt-header-row{display:flex;border-bottom:2px solid var(--border);background:var(--surface2)}
-.gantt-label-col{width:300px;flex-shrink:0;padding:8px 14px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;border-right:1px solid var(--border)}
-.gantt-months-area{flex:1;display:flex;overflow:hidden}
-.gantt-month-cell{text-align:center;padding:8px 5px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;border-right:1px solid var(--border);white-space:nowrap;overflow:hidden}
-.gantt-row{display:flex;border-bottom:1px solid var(--border);align-items:center;min-height:38px}
-.gantt-row-label{width:300px;flex-shrink:0;padding:6px 14px;border-right:1px solid var(--border);display:flex;align-items:center;gap:6px;overflow:hidden}
-.gantt-row-label span{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gantt-timeline{flex:1;position:relative;height:38px}
-.gantt-bar{position:absolute;height:18px;top:10px;border-radius:3px;display:flex;align-items:center;padding:0 6px;font-size:10px;font-weight:600;color:#fff;overflow:hidden;cursor:pointer;transition:opacity .15s}
-.gantt-bar:hover{opacity:.85}
-.gantt-today-line{position:absolute;top:0;bottom:0;width:2px;background:var(--gantt-today);z-index:2;opacity:.8}
-/* KANBAN */
-.kanban-board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:start}
-.kanban-col{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
-.kanban-col-header{padding:12px 14px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
-.kanban-col-body{padding:10px;display:flex;flex-direction:column;gap:8px;min-height:120px}
-.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;transition:box-shadow .15s,transform .15s}
-.kanban-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
-.kanban-card-title{font-size:14px;font-weight:500;margin-bottom:6px;line-height:1.3}
+.resp-inner{border:none;outline:none;font-size:13px;font-family:inherit;color:var(--text2);background:transparent;flex:1;min-width:140px;height:22px;padding:0;cursor:pointer}
+
+/* ── GANTT ─────────────────────────────────────────── */
+.gantt-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.gantt-scale-btn{height:28px;padding:0 11px;font-size:12px;font-family:inherit;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text2);cursor:pointer;transition:all .12s;font-weight:500}
+.gantt-scale-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.gantt-outer{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+.gantt-header-sticky{position:sticky;top:0;z-index:10;background:var(--surface2);border-bottom:2px solid var(--border)}
+.gantt-header-row{display:flex}
+.gantt-label-col{width:280px;flex-shrink:0;padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;border-right:1px solid var(--border)}
+.gantt-scroll-area{flex:1;overflow-x:auto;overflow-y:visible;position:relative}
+/* prevent double scrollbars */
+.gantt-scroll-area::-webkit-scrollbar{height:7px}
+.gantt-scroll-area::-webkit-scrollbar-track{background:var(--surface2)}
+.gantt-scroll-area::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+.gantt-cells-header{display:flex;white-space:nowrap;min-width:max-content}
+.gantt-cell-hdr{display:inline-flex;align-items:center;justify-content:center;padding:8px 4px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;border-right:1px solid var(--border);white-space:nowrap;overflow:hidden;flex-shrink:0}
+.gantt-body{display:flex;flex-direction:column}
+.gantt-row{display:flex;border-bottom:1px solid var(--border);min-height:36px;align-items:stretch}
+.gantt-row:last-child{border-bottom:none}
+.gantt-row-label{width:280px;flex-shrink:0;padding:5px 12px;border-right:1px solid var(--border);display:flex;align-items:center;gap:5px;overflow:hidden;min-height:36px}
+.gantt-row-label span{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gantt-row-cells{flex:1;min-width:max-content;position:relative;display:flex}
+.gantt-cell{flex-shrink:0;border-right:1px solid var(--gantt-grid);height:36px;position:relative}
+.gantt-bar{position:absolute;height:18px;top:9px;border-radius:4px;display:flex;align-items:center;padding:0 7px;font-size:10px;font-weight:700;color:#fff;overflow:hidden;cursor:pointer;z-index:2;transition:filter .15s,transform .1s}
+.gantt-bar:hover{filter:brightness(1.1);transform:scaleY(1.07)}
+.gantt-today-line{position:absolute;top:0;bottom:0;width:2px;background:var(--gantt-today);z-index:5;pointer-events:none}
+.gantt-today-line::after{content:'';position:absolute;top:6px;left:-4px;width:10px;height:10px;background:var(--gantt-today);border-radius:50%}
+
+/* ── KANBAN ─────────────────────────────────────────── */
+.kanban-board{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start}
+.kanban-col{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:background .15s}
+.kanban-col.drag-over-col{background:var(--accent-bg);border-color:var(--accent)}
+.kanban-col-header{padding:11px 13px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.kanban-col-count{font-size:16px;font-weight:700}
+.kanban-col-body{padding:9px;display:flex;flex-direction:column;gap:7px;min-height:100px}
+.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:11px;cursor:grab;transition:box-shadow .15s,transform .12s,border-color .12s;user-select:none}
+.kanban-card:active{cursor:grabbing}
+.kanban-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);border-color:var(--border2)}
+.kanban-card.dragging{opacity:.45;transform:rotate(1.5deg) scale(.98)}
+.kanban-card-title{font-size:13px;font-weight:600;margin-bottom:7px;line-height:1.35;color:var(--text)}
 .kanban-card-meta{font-size:11px;color:var(--text3);display:flex;flex-wrap:wrap;gap:4px;align-items:center}
-/* REPORTS */
-.reports-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.report-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px}
-.report-card h4{font-size:13px;font-weight:700;text-transform:uppercase;color:var(--text3);letter-spacing:.05em;margin-bottom:14px}
+
+/* ── REPORTS ─────────────────────────────────────────── */
+.reports-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.report-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px}
+.report-card h4{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:14px}
 .chart-bar-wrap{display:flex;flex-direction:column;gap:8px}
-.chart-bar-row{display:flex;align-items:center;gap:10px;font-size:13px}
-.chart-bar-label{width:90px;text-align:right;color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
-.chart-bar-track{flex:1;height:18px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
-.chart-bar-fill{height:100%;border-radius:3px;transition:width .4s}
-.chart-bar-val{font-size:12px;color:var(--text3);min-width:30px}
-/* TEAM CARDS */
-.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-/* MISC */
-.filter-select{height:32px;padding:0 10px;font-size:13px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);cursor:pointer}
-.search-input{height:32px;padding:0 12px;font-size:13px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);width:170px}
-.empty{padding:40px;text-align:center;color:var(--text3);font-size:15px}
-.pct-bar-wrap{width:60px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
+.chart-bar-row{display:flex;align-items:center;gap:9px}
+.chart-bar-label{width:85px;text-align:right;color:var(--text2);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.chart-bar-track{flex:1;height:16px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
+.chart-bar-fill{height:100%;border-radius:3px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.chart-bar-val{font-size:12px;color:var(--text3);min-width:28px;font-weight:600}
+
+/* ── TEAM ────────────────────────────────────────────── */
+.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+
+/* ── MISC ────────────────────────────────────────────── */
+.filter-select{height:30px;padding:0 9px;font-size:12px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);cursor:pointer}
+.search-input{height:30px;padding:0 11px;font-size:12px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);width:160px;transition:border-color .12s,box-shadow .12s}
+.search-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg);outline:none}
+.empty{padding:40px;text-align:center;color:var(--text3);font-size:14px;line-height:1.6}
+.empty i{font-size:28px;margin-bottom:10px;display:block;opacity:.5}
+.pct-bar-wrap{width:58px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
 .pct-bar{height:100%;border-radius:3px;background:var(--success);transition:width .3s}
 .export-note{font-size:11px;color:var(--text3);font-style:italic}
-.file-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--accent-bg)}
-.fas,.far,.fab{margin-right:4px}
-.btn .fas{margin-right:5px}
-.user-list-item{display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border);background:var(--surface)}
-.role-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px}
+.fas,.far,.fab{margin-right:3px}
+.btn i{margin-right:4px}
+.user-list-item{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;border-bottom:1px solid var(--border);background:var(--surface)}
+.user-list-item:hover{background:var(--surface2)}
+.role-badge{display:inline-flex;align-items:center;font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em}
 .role-admin{background:#fef3c7;color:#92400e}
 .role-editor{background:var(--accent-bg);color:var(--accent)}
 .role-viewer{background:var(--surface2);color:var(--text3);border:1px solid var(--border)}
 .role-pending{background:var(--warn-bg);color:var(--warn)}
 /* Alerts section */
-.alerts-bar{display:flex;gap:10px;flex-wrap:wrap}
-.alert-item{display:flex;align-items:center;gap:6px;background:var(--danger-bg);border:1px solid #fca5a5;border-radius:var(--radius);padding:7px 12px;font-size:13px;color:var(--danger)}
+.alerts-bar{display:flex;gap:8px;flex-wrap:wrap}
+.alert-item{display:flex;align-items:center;gap:6px;background:var(--danger-bg);border:1px solid #fca5a5;border-radius:var(--radius);padding:6px 11px;font-size:12px;color:var(--danger)}
 .alert-item.warn{background:var(--warn-bg);border-color:#fcd34d;color:var(--warn)}
+/* Repository */
+.repo-file-row{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);transition:background .1s}
+.repo-file-row:hover{background:var(--surface2)}
+.repo-file-row:last-child{border-bottom:none}
+.repo-file-proj{font-size:10px;background:var(--proj-bg);color:var(--proj);border-radius:4px;padding:2px 6px;font-weight:700;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -182,57 +260,67 @@ tr[draggable="true"]:active{cursor:grabbing}
 <!-- LOGIN -->
 <div class="login-screen" id="loginScreen">
   <div class="login-box" id="boxLogin">
-    <h2>Tablero SE EMTP</h2>
-    <p>Ingresa tus credenciales para acceder</p>
+    <div class="login-logo">
+      <div class="login-logo-mark">SE</div>
+      <div class="login-logo-text">Tablero SE EMTP<small>Ministerio de Educación de Chile</small></div>
+    </div>
+    <h2>Bienvenido/a</h2>
+    <p>Ingresa tus credenciales para acceder al tablero</p>
     <div class="login-error" id="loginError"></div>
     <div class="login-success" id="loginSuccess"></div>
     <div class="form-row">
       <label>Usuario</label>
-      <input type="text" id="loginUser" placeholder="Ingresa tu usuario" autofocus>
+      <input type="text" id="loginUser" placeholder="Tu nombre de usuario" autofocus>
     </div>
     <div class="form-row">
       <label>Contraseña</label>
-      <input type="password" id="loginPass" placeholder="Ingresa tu contraseña" onkeydown="if(event.key==='Enter') attemptLogin()">
+      <input type="password" id="loginPass" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter') attemptLogin()">
     </div>
-    <button class="btn btn-primary" id="btnLoginBtn" style="width:100%;height:40px;font-size:15px;font-weight:500" onclick="attemptLogin()"><i class="fas fa-sign-in-alt"></i> Iniciar sesión</button>
-    <div class="toggle-auth" onclick="toggleAuthMode()">¿No tienes cuenta? Solicita acceso aquí</div>
+    <button class="btn btn-primary" id="btnLoginBtn" style="width:100%;height:42px;font-size:14px;font-weight:600" onclick="attemptLogin()"><i class="fas fa-sign-in-alt"></i> Iniciar sesión</button>
+    <div class="toggle-auth" onclick="toggleAuthMode()">¿No tienes cuenta? Solicitar acceso</div>
   </div>
   <div class="login-box" id="boxRegister" style="display:none">
+    <div class="login-logo">
+      <div class="login-logo-mark">SE</div>
+      <div class="login-logo-text">Tablero SE EMTP<small>Ministerio de Educación de Chile</small></div>
+    </div>
     <h2>Solicitar Acceso</h2>
-    <p>Crea tu usuario para el Tablero SE EMTP</p>
+    <p>Tu solicitud será revisada por el administrador</p>
     <div class="login-error" id="regError"></div>
     <div class="form-row">
-      <label>Elige un Usuario</label>
-      <input type="text" id="regUser" placeholder="Ej: Juan Perez" autofocus>
+      <label>Nombre de usuario</label>
+      <input type="text" id="regUser" placeholder="Ej: juan.perez" autofocus>
     </div>
     <div class="form-row">
-      <label>Crea una Contraseña</label>
-      <input type="password" id="regPass" placeholder="Tu contraseña">
+      <label>Contraseña</label>
+      <input type="password" id="regPass" placeholder="Crea tu contraseña">
     </div>
-    <button class="btn btn-success" id="btnRegBtn" style="width:100%;height:40px;font-size:15px;font-weight:500" onclick="attemptRegister()"><i class="fas fa-user-plus"></i> Enviar solicitud</button>
-    <div class="toggle-auth" onclick="toggleAuthMode()">Ya tengo cuenta. Volver al inicio de sesión</div>
+    <button class="btn btn-success" id="btnRegBtn" style="width:100%;height:42px;font-size:14px;font-weight:600" onclick="attemptRegister()"><i class="fas fa-user-plus"></i> Enviar solicitud</button>
+    <div class="toggle-auth" onclick="toggleAuthMode()">Ya tengo cuenta — Iniciar sesión</div>
   </div>
 </div>
 
 <!-- APP -->
 <div class="shell" id="mainApp" style="display:none">
 <header>
-  <div class="logo">SE EMTP</div>
-  <div style="width:1px;height:20px;background:var(--border)"></div>
-  <div class="h-title">Tablero de gestión y seguimiento</div>
+  <div class="logo-mark">SE</div>
+  <div class="h-divider"></div>
+  <div class="h-title">Tablero EMTP</div>
   <div class="spacer"></div>
   <div class="header-actions">
-    <div class="user-info">
-      <div class="user-avatar" id="userAvatar">A</div>
-      <span id="userName">Usuario</span>
-      <span id="userRoleBadge" style="margin-left:4px"></span>
-    </div>
-    <button class="btn btn-ghost btn-sm" id="btnAdminUsers" style="display:none" onclick="openAdminUsersModal()"><i class="fas fa-user-shield"></i> Usuarios</button>
-    <button class="btn btn-ghost btn-sm" onclick="openTeamsModal()"><i class="fas fa-users"></i> Equipos</button>
     <span id="lastSaved" class="export-note"></span>
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()"><i class="fas fa-file-csv"></i> CSV</button>
-    <button class="btn btn-ghost btn-sm" id="btnExportXLSX" onclick="exportXLSX()"><i class="fas fa-file-excel"></i> Excel</button>
-    <button class="btn btn-ghost btn-sm" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Salir</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportXLSX()"><i class="fas fa-file-excel"></i> Excel</button>
+    <div class="h-divider"></div>
+    <button class="btn btn-ghost btn-sm" onclick="openTeamsModal()"><i class="fas fa-users"></i> Equipos</button>
+    <button class="btn btn-ghost btn-sm" id="btnAdminUsers" style="display:none" onclick="openAdminUsersModal()"><i class="fas fa-user-shield"></i> Usuarios</button>
+    <div class="h-divider"></div>
+    <div class="user-info">
+      <div class="user-avatar" id="userAvatar">A</div>
+      <span id="userName" style="font-weight:500;color:var(--text)">Usuario</span>
+      <span id="userRoleBadge"></span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="logout()" title="Cerrar sesión"><i class="fas fa-sign-out-alt"></i></button>
   </div>
 </header>
 
@@ -529,7 +617,9 @@ async function uploadFileToDrive(id) {
       const result = await res.json();
       if(result.status === 'success') {
         if(!fileStore[id]) fileStore[id]=[];
-        fileStore[id].push({ name:result.name, url:result.url });
+        fileStore[id].push({ name:result.name, url:result.url, nodeId:id });
+        // Refresh global file list too
+        await loadFilesFromDrive();
         showToast('Archivo subido correctamente', 'success');
         closeModal(); renderAll();
       }
@@ -780,108 +870,152 @@ function handleDrop(e,targetId) {
   saveData(); renderAll(); return false;
 }
 
-// ── VISTA GANTT (CORREGIDA) ───────────────────────────────────────────
+// ── GANTT: escala y scroll ────────────────────────────────────────────
+let ganttScale = 'mes'; // 'dia' | 'semana' | 'mes'
+function setGanttScale(s) { ganttScale = s; renderGantt(); }
+
 function renderGantt() {
   const allNodes = getAllNodes(data);
-  const dates = allNodes.map(n=>computedDates(n));
-  const starts = dates.map(d=>d.start).filter(Boolean);
-  const ends = dates.map(d=>d.end).filter(Boolean);
+  const starts = allNodes.map(n=>computedDates(n).start).filter(Boolean);
+  const ends   = allNodes.map(n=>computedDates(n).end).filter(Boolean);
 
   if(!starts.length) {
-    document.getElementById('viewGantt').innerHTML = '<div class="empty"><i class="fas fa-calendar-alt" style="font-size:24px;margin-bottom:8px;display:block"></i>No hay fechas configuradas. Define fechas de inicio y fin en los elementos.</div>';
+    document.getElementById('viewGantt').innerHTML = '<div class="empty"><i class="fas fa-calendar-alt"></i>No hay fechas configuradas. Define fechas de inicio y fin en los elementos.</div>';
     return;
   }
 
   const minDate = parseDate(starts.reduce((a,b)=>a<b?a:b));
-  const rawMax = parseDate(ends.reduce((a,b)=>a>b?a:b));
-  rawMax.setDate(rawMax.getDate()+14); // padding al final
-  const totalMs = rawMax - minDate;
-  const totalDays = Math.ceil(totalMs / 86400000);
+  const rawMax  = parseDate(ends.reduce((a,b)=>a>b?a:b));
+  if(ganttScale==='dia')    rawMax.setDate(rawMax.getDate()+7);
+  else if(ganttScale==='semana') rawMax.setDate(rawMax.getDate()+21);
+  else                      rawMax.setDate(rawMax.getDate()+30);
 
-  // Construir cabecera de meses
-  const monthColors = ['#2563eb','#4f46e5','#7c3aed','#0891b2','#059669','#d97706'];
-  let months = [];
-  let cursor = new Date(minDate); cursor.setDate(1);
-  while(cursor <= rawMax) {
-    const monthStart = new Date(Math.max(cursor, minDate));
-    const nextMonth = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
-    const monthEnd = new Date(Math.min(nextMonth, rawMax));
-    const leftPct = ((monthStart - minDate) / totalMs) * 100;
-    const widthPct = ((monthEnd - monthStart) / totalMs) * 100;
-    const label = cursor.toLocaleDateString('es-CL',{month:'short',year:'2-digit'}).replace('.','/');
-    months.push({ label, leftPct, widthPct, color: monthColors[cursor.getMonth()%6] });
-    cursor = nextMonth;
+  // Construir unidades de tiempo
+  const units = [];
+  if(ganttScale==='dia') {
+    let d = new Date(minDate);
+    while(d <= rawMax) { units.push(new Date(d)); d.setDate(d.getDate()+1); }
+  } else if(ganttScale==='semana') {
+    let d = new Date(minDate); d.setDate(d.getDate() - ((d.getDay()||7)-1));
+    while(d <= rawMax) { units.push(new Date(d)); d.setDate(d.getDate()+7); }
+  } else {
+    let d = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+    while(d <= rawMax) { units.push(new Date(d)); d.setMonth(d.getMonth()+1); }
   }
 
-  const monthHeaderHTML = months.map(m =>
-    `<div class="gantt-month-cell" style="position:absolute;left:${m.leftPct}%;width:${m.widthPct}%;border-right:1px solid var(--border);color:${m.color}">${m.label}</div>`
-  ).join('');
+  const totalMs = rawMax - minDate;
+  const CELL_W  = ganttScale==='dia' ? 38 : ganttScale==='semana' ? 80 : 108;
+  const totalW  = units.length * CELL_W;
+
+  // Cabecera
+  const headerCells = units.map(u => {
+    let label;
+    if(ganttScale==='dia')        label = u.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+    else if(ganttScale==='semana') label = u.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+    else                           label = u.toLocaleDateString('es-CL',{month:'short',year:'2-digit'}).replace('.','');
+    const isCur = ganttScale==='mes'
+      ? (u.getFullYear()===new Date().getFullYear()&&u.getMonth()===new Date().getMonth())
+      : false;
+    return `<div class="gantt-cell-hdr" style="width:${CELL_W}px;min-width:${CELL_W}px;${isCur?'background:var(--accent-bg);color:var(--accent);':''}">${label}</div>`;
+  }).join('');
 
   // Línea de hoy
   const todayDate = parseDate(today());
-  const todayLeft = Math.max(0, Math.min(100, ((todayDate - minDate) / totalMs) * 100));
-  const todayLine = todayDate >= minDate && todayDate <= rawMax
-    ? `<div class="gantt-today-line" style="left:${todayLeft}%" title="Hoy"></div>` : '';
+  const todayPx   = ((todayDate - minDate) / totalMs) * totalW;
+  const showToday = todayDate >= minDate && todayDate <= rawMax;
+  const todayLineHTML = showToday ? `<div class="gantt-today-line" style="left:${todayPx}px" title="Hoy: ${formatDate(today())}"></div>` : '';
 
-  // Colores por tipo
+  // Grid de fondo
+  const gridLines = units.map((_,i) =>
+    `<div style="position:absolute;left:${i*CELL_W}px;top:0;bottom:0;width:1px;background:var(--gantt-grid)"></div>`
+  ).join('');
+
   const barColors = { proyecto:'var(--proj)', actividad:'var(--act)', tarea:'var(--task)' };
-
-  let rows = '';
   const f = getFilters();
-  function renderGanttNodes(nodes, level) {
-    for(let n of nodes) {
-      if(!nodeMatchesFilter(n,f) && !hasFilteredDescendant(n,f)) continue;
-      if(collapsed[n.id]) { rows+=buildGanttRow(n, level, totalMs, minDate, barColors, todayLine); continue; }
-      rows += buildGanttRow(n, level, totalMs, minDate, barColors, todayLine);
-      if(n.children && n.children.length>0 && !collapsed[n.id]) renderGanttNodes(n.children, level+1);
-    }
-  }
-  function buildGanttRow(n, level, totalMs, minDate, barColors, todayLine) {
+  let bodyRows = '';
+
+  function buildRow(n, level) {
     const cd = computedDates(n);
     let barHTML = '';
     if(cd.start && cd.end) {
       const sd = parseDate(cd.start), ed = parseDate(cd.end);
-      const leftPct = Math.max(0, ((sd-minDate)/totalMs)*100);
-      const widthPct = Math.max(0.5, ((ed-sd)/totalMs)*100);
-      const ov = isOverdue(n);
-      const color = ov ? 'var(--danger)' : barColors[n.type] || 'var(--accent)';
-      barHTML = `<div class="gantt-bar" style="left:${leftPct}%;width:${widthPct}%;background:${color}" title="${n.name}: ${formatDate(cd.start)} → ${formatDate(cd.end)}">${n.name.slice(0,20)}</div>`;
+      if(sd && ed) {
+        const leftPx  = Math.max(0, ((sd-minDate)/totalMs)*totalW);
+        const widthPx = Math.max(4,  ((ed-sd)/totalMs)*totalW);
+        const ov    = isOverdue(n);
+        const color = ov ? 'var(--danger)' : barColors[n.type]||'var(--accent)';
+        const pct   = n.type!=='tarea' ? pctDone([n]) : null;
+        const progress = pct!==null ? `<div style="position:absolute;left:0;top:0;height:100%;width:${pct}%;background:rgba(255,255,255,.22);border-radius:4px 0 0 4px"></div>` : '';
+        barHTML = `<div class="gantt-bar" style="left:${leftPx}px;width:${widthPx}px;background:${color}" onclick="openEditModal('${n.id}')" title="${n.name}: ${formatDate(cd.start)} → ${formatDate(cd.end)}${pct!==null?' ('+pct+'%)':''}">${progress}${n.name.slice(0,22)}</div>`;
+      }
     }
     return `<div class="gantt-row">
-      <div class="gantt-row-label" style="padding-left:${14+level*16}px">
-        ${n.children&&n.children.length?`<button class="toggle-btn" onclick="toggleCollapse('${n.id}')"><i class="fas fa-chevron-${collapsed[n.id]?'right':'down'}"></i></button>`:'<span class="no-toggle"></span>'}
-        ${typeBadge(n.type)}<span>${n.name}</span>
+      <div class="gantt-row-label" style="padding-left:${10+level*14}px">
+        ${n.children&&n.children.length ? `<button class="toggle-btn" onclick="toggleCollapse('${n.id}')"><i class="fas fa-chevron-${collapsed[n.id]?'right':'down'}"></i></button>` : '<span class="no-toggle"></span>'}
+        ${typeBadge(n.type)}<span title="${n.name}">${n.name}</span>
       </div>
-      <div class="gantt-timeline">${todayLine}${barHTML}</div>
+      <div class="gantt-row-cells" style="width:${totalW}px">
+        ${gridLines}${todayLineHTML}${barHTML}
+      </div>
     </div>`;
   }
 
-  renderGanttNodes(data, 0);
+  function walkNodes(nodes, level) {
+    for(let n of nodes) {
+      if(!nodeMatchesFilter(n,f) && !hasFilteredDescendant(n,f)) continue;
+      bodyRows += buildRow(n, level);
+      if(n.children && n.children.length && !collapsed[n.id]) walkNodes(n.children, level+1);
+    }
+  }
+  walkNodes(data, 0);
 
   document.getElementById('viewGantt').innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-      <span style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase">Leyenda:</span>
-      <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px"><span style="width:14px;height:10px;background:var(--proj);border-radius:2px;display:inline-block"></span>Proyecto</span>
-      <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px"><span style="width:14px;height:10px;background:var(--act);border-radius:2px;display:inline-block"></span>Actividad</span>
-      <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px"><span style="width:14px;height:10px;background:var(--task);border-radius:2px;display:inline-block"></span>Tarea</span>
-      <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px"><span style="width:14px;height:10px;background:var(--danger);border-radius:2px;display:inline-block"></span>Vencida</span>
-      <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px"><span style="width:2px;height:14px;background:var(--gantt-today);display:inline-block"></span>Hoy</span>
+    <div class="gantt-toolbar">
+      <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Escala:</span>
+      <button class="gantt-scale-btn ${ganttScale==='dia'?'active':''}" onclick="setGanttScale('dia')">Días</button>
+      <button class="gantt-scale-btn ${ganttScale==='semana'?'active':''}" onclick="setGanttScale('semana')">Semanas</button>
+      <button class="gantt-scale-btn ${ganttScale==='mes'?'active':''}" onclick="setGanttScale('mes')">Meses</button>
+      <div style="flex:1"></div>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:12px;height:8px;background:var(--proj);border-radius:2px;display:inline-block"></span>Proyecto</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:12px;height:8px;background:var(--act);border-radius:2px;display:inline-block"></span>Actividad</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:12px;height:8px;background:var(--task);border-radius:2px;display:inline-block"></span>Tarea</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:12px;height:8px;background:var(--danger);border-radius:2px;display:inline-block"></span>Vencida</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:2px;height:12px;background:var(--gantt-today);display:inline-block;border-radius:1px"></span>Hoy</span>
     </div>
-    <div class="gantt-wrap"><div class="gantt-container">
-      <div class="gantt-header-row">
-        <div class="gantt-label-col">Elemento</div>
-        <div style="flex:1;position:relative;height:36px;overflow:hidden">${monthHeaderHTML}</div>
+    <div class="gantt-outer">
+      <div class="gantt-header-sticky">
+        <div style="display:flex">
+          <div class="gantt-label-col" style="min-height:36px;display:flex;align-items:center">Elemento</div>
+          <div class="gantt-scroll-area" id="ganttHdrScroll" style="overflow-x:hidden;flex:1">
+            <div style="display:flex;min-width:max-content">${headerCells}</div>
+          </div>
+        </div>
       </div>
-      ${rows||'<div class="empty">Sin elementos con fechas.</div>'}
-    </div></div>`;
+      <div style="display:flex">
+        <div style="width:280px;flex-shrink:0"></div>
+        <div style="flex:1;overflow-x:auto" id="ganttBodyScroll" onscroll="document.getElementById('ganttHdrScroll').scrollLeft=this.scrollLeft">
+          <div style="min-width:${totalW}px">
+            ${bodyRows || '<div class="empty">Sin elementos con fechas.</div>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  // Auto-scroll a hoy
+  if(showToday) {
+    setTimeout(() => {
+      const bs = document.getElementById('ganttBodyScroll');
+      if(bs) bs.scrollLeft = Math.max(0, todayPx - 240);
+    }, 60);
+  }
 }
 
-// ── VISTA KANBAN (NUEVA) ──────────────────────────────────────────────
+// ── VISTA KANBAN CON DRAG & DROP ─────────────────────────────────────
+let kanbanDragId = null;
+
 function renderKanban() {
   const statuses = ['Pendiente','En curso','Completado','Bloqueado'];
-  const statusColors = {
-    'Pendiente': '--warn', 'En curso': '--accent', 'Completado': '--success', 'Bloqueado': '--danger'
-  };
+  const statusColors = { 'Pendiente':'--warn', 'En curso':'--accent', 'Completado':'--success', 'Bloqueado':'--danger' };
   const f = getFilters();
   const allNodes = getAllNodes(data).filter(n => n.type === 'tarea');
   const filtered = allNodes.filter(n => nodeMatchesFilter(n,f));
@@ -892,28 +1026,67 @@ function renderKanban() {
       const cd = computedDates(n);
       const ov = isOverdue(n);
       const project = (() => { let p=findParentOfNode(n.id); while(p){ if(p.type==='proyecto') return p.name; p=findParentOfNode(p.id); } return null; })();
-      const resp = (n.responsibles||[]).slice(0,3).map(r=>`<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);align-items:center;justify-content:center;font-size:10px;font-weight:700" title="${r}">${r.charAt(0).toUpperCase()}</span>`).join('');
-      return `<div class="kanban-card" onclick="${canEdit?`openEditModal('${n.id}')`:''}">
-        <div class="kanban-card-title">${n.name}${ov?`<span class="alert-badge" style="margin-left:6px">Vencida</span>`:''}</div>
+      const resp = (n.responsibles||[]).slice(0,3).map(r=>`<div style="display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0" title="${r}">${r.charAt(0).toUpperCase()}</div>`).join('');
+      return `<div class="kanban-card" data-id="${n.id}"
+          draggable="true"
+          ondragstart="kanbanDragStart(event,'${n.id}')"
+          ondragend="kanbanDragEnd(event)"
+          onclick="if(!window._kanbanDragged) openEditModal('${n.id}')">
+        <div class="kanban-card-title">${n.name}${ov?'<span class="alert-badge" style="margin-left:5px">Vencida</span>':''}</div>
         <div class="kanban-card-meta">
-          ${project?`<span style="background:var(--proj-bg);color:var(--proj);border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">${project.slice(0,20)}</span>`:''}
-          ${cd.end?`<span style="color:${ov?'var(--danger)':'var(--text3)'};font-size:11px"><i class="fas fa-calendar"></i> ${formatDate(cd.end)}</span>`:''}
-          ${resp?`<span style="display:flex;gap:2px;margin-left:auto">${resp}</span>`:''}
+          ${project?`<span class="repo-file-proj">${project.slice(0,22)}</span>`:''}
+          ${cd.end?`<span style="color:${ov?'var(--danger)':'var(--text3)'};font-size:11px"><i class="fas fa-calendar-alt"></i>${formatDate(cd.end)}</span>`:''}
+          ${resp?`<div style="display:flex;gap:2px;margin-left:auto">${resp}</div>`:''}
         </div>
       </div>`;
     }).join('');
-    return `<div class="kanban-col">
+
+    return `<div class="kanban-col" data-status="${status}"
+        ondragover="kanbanColOver(event)"
+        ondragenter="kanbanColEnter(event)"
+        ondragleave="kanbanColLeave(event)"
+        ondrop="kanbanColDrop(event,'${status}')">
       <div class="kanban-col-header" style="border-top:3px solid var(${statusColors[status]})">
-        <span style="color:var(${statusColors[status]})">${status}</span>
-        <span style="font-size:18px;font-weight:600;color:var(${statusColors[status]})">${cards.length}</span>
+        <span style="color:var(${statusColors[status]});font-weight:700">${status}</span>
+        <span class="kanban-col-count" style="color:var(${statusColors[status]})">${cards.length}</span>
       </div>
-      <div class="kanban-col-body">
-        ${cardsHTML||`<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px">Sin tareas</div>`}
+      <div class="kanban-col-body" id="kbody-${status.replace(' ','_')}">
+        ${cardsHTML || '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px;border:2px dashed var(--border);border-radius:var(--radius)">Sin tareas</div>'}
       </div>
     </div>`;
   }).join('');
 
   document.getElementById('viewKanban').innerHTML = `<div class="kanban-board">${cols}</div>`;
+}
+
+window._kanbanDragged = false;
+function kanbanDragStart(e, id) {
+  kanbanDragId = id;
+  window._kanbanDragged = true;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', id);
+  setTimeout(() => e.target.classList.add('dragging'), 0);
+}
+function kanbanDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over-col'));
+  setTimeout(() => { window._kanbanDragged = false; }, 100);
+}
+function kanbanColOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function kanbanColEnter(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over-col'); }
+function kanbanColLeave(e) { e.currentTarget.classList.remove('drag-over-col'); }
+function kanbanColDrop(e, newStatus) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over-col');
+  if(!kanbanDragId || !canEdit) return;
+  const n = findNode(kanbanDragId);
+  if(n && n.status !== newStatus) {
+    n.status = newStatus;
+    saveData();
+    renderAll();
+    showToast(`Tarea movida a "${newStatus}"`, 'success');
+  }
+  kanbanDragId = null;
 }
 
 // ── VISTA EQUIPO (CORREGIDA) ──────────────────────────────────────────
@@ -1139,29 +1312,92 @@ function renderReportes() {
 }
 
 // ── VISTA ARCHIVOS ────────────────────────────────────────────────────
+function getProjectForNode(id) {
+  let n = findNode(id);
+  if(!n) return null;
+  if(n.type==='proyecto') return n.name;
+  let p = findParentOfNode(id);
+  while(p) { if(p.type==='proyecto') return p.name; p = findParentOfNode(p.id); }
+  return null;
+}
+
 function renderArchivos() {
   const globalFiles = fileStore['global'] || [];
-  let html = `<div style="padding:20px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h3 style="font-size:16px;font-weight:600">Repositorio de Archivos</h3>
+  // Merge per-node files into a flat list with project context
+  const perNodeFiles = [];
+  getAllNodes(data).forEach(n => {
+    (fileStore[n.id]||[]).forEach(f => {
+      perNodeFiles.push({ ...f, nodeId:n.id, nodeName:n.name, projectName: getProjectForNode(n.id) });
+    });
+  });
+  const allFiles = [...perNodeFiles];
+  // Add global files not already listed
+  globalFiles.forEach(f => {
+    if(!allFiles.find(x=>x.url===f.url)) allFiles.push({ ...f, nodeId:null, nodeName:null, projectName:null });
+  });
+
+  const uploadSection = canEdit ? `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px;background:var(--surface2);border-top:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:600;color:var(--text2)"><i class="fas fa-cloud-upload-alt"></i> Subir archivo al repositorio general:</span>
+      <input type="file" id="repoFileInput" style="font-size:12px;flex:1;min-width:200px">
+      <button class="btn btn-primary btn-sm" onclick="uploadRepoFile()"><i class="fas fa-upload"></i> Subir</button>
+    </div>` : '';
+
+  let html = `<div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border)">
+      <h3 style="font-size:15px;font-weight:700">Repositorio de Archivos <span style="font-size:12px;font-weight:400;color:var(--text3)">(${allFiles.length} archivos)</span></h3>
     </div>`;
-  if(!globalFiles.length) {
-    html += '<div class="empty"><i class="fas fa-folder-open" style="font-size:24px;margin-bottom:8px;display:block"></i>No hay archivos en el repositorio.</div>';
+
+  if(!allFiles.length) {
+    html += '<div class="empty"><i class="fas fa-folder-open"></i>No hay archivos en el repositorio.<br><span style="font-size:12px">Sube archivos desde el botón del clip en la tabla, o desde aquí abajo.</span></div>';
   } else {
-    html += `<div style="display:flex;flex-direction:column;gap:1px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">`;
-    globalFiles.forEach(f => {
-      const ext = f.name.split('.').pop().toLowerCase();
-      const iconClass = ext==='pdf'?'fa-file-pdf':ext==='xlsx'||ext==='xls'?'fa-file-excel':ext==='docx'||ext==='doc'?'fa-file-word':ext==='pptx'||ext==='ppt'?'fa-file-powerpoint':'fa-file';
-      html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border)">
-        <i class="fas ${iconClass}" style="color:var(--accent);font-size:16px"></i>
-        <a href="${f.url}" target="_blank" style="color:var(--text);text-decoration:none;flex:1;font-size:14px">${f.name}</a>
-        <a href="${f.url}" target="_blank" class="btn btn-ghost btn-sm"><i class="fas fa-external-link-alt"></i> Abrir</a>
+    html += '<div>';
+    allFiles.forEach(f => {
+      const ext = (f.name||'').split('.').pop().toLowerCase();
+      const iconClass = ext==='pdf'?'fa-file-pdf':ext==='xlsx'||ext==='xls'?'fa-file-excel':ext==='docx'||ext==='doc'?'fa-file-word':ext==='pptx'||ext==='ppt'?'fa-file-powerpoint':ext==='jpg'||ext==='png'||ext==='jpeg'?'fa-file-image':'fa-file';
+      const projBadge = f.projectName ? `<span class="repo-file-proj">${f.projectName.slice(0,24)}</span>` : '';
+      const nodeBadge = f.nodeName && f.nodeName!==f.projectName ? `<span style="font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 6px">${f.nodeName.slice(0,22)}</span>` : '';
+      html += `<div class="repo-file-row">
+        <i class="fas ${iconClass}" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
+          <div style="display:flex;gap:5px;margin-top:3px;flex-wrap:wrap">${projBadge}${nodeBadge}</div>
+        </div>
+        <a href="${f.url}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0"><i class="fas fa-external-link-alt"></i> Abrir</a>
       </div>`;
     });
     html += '</div>';
   }
-  html += '</div>';
+  html += uploadSection + '</div>';
   document.getElementById('viewArchivos').innerHTML = html;
+}
+
+async function uploadRepoFile() {
+  const fi = document.getElementById('repoFileInput');
+  if(!fi||!fi.files.length) return showToast('Selecciona un archivo', 'error');
+  const file = fi.files[0];
+  const btn = fi.nextElementSibling;
+  btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Subiendo...'; btn.disabled=true;
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64 = e.target.result.split(',')[1];
+    try {
+      const res = await fetch(CLOUD_API_URL, {
+        method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'uploadFile', user:currentUser, pass:currentPass, data:base64, filename:file.name, mimetype:file.type })
+      });
+      const result = await res.json();
+      if(result.status==='success') {
+        if(!fileStore['global']) fileStore['global']=[];
+        fileStore['global'].push({ name:result.name, url:result.url });
+        await loadFilesFromDrive();
+        showToast('Archivo subido al repositorio', 'success');
+        renderArchivos();
+      } else { showToast('Error al subir: '+result.message, 'error'); }
+    } catch(err) { showToast('Error de conexión', 'error'); }
+    btn.innerHTML='<i class="fas fa-upload"></i> Subir'; btn.disabled=false;
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── MODALES DE AGREGAR/EDITAR NODOS ───────────────────────────────────
@@ -1240,8 +1476,27 @@ window.openEditModal = function(id) {
   const n=findNode(id); if(!n) return;
   initRespWidget(n.responsibles||[], n.support||[]);
   const readOnly = !canEdit;
-  showModal(`<h3>${readOnly?'Ver':'Editar'}: ${typeBadge(n.type)} ${n.type}</h3>
+  const cd = computedDates(n);
+  const hasChildren = n.children && n.children.length > 0;
+  // Fecha inicio/fin: si tiene hijos, son calculadas (solo lectura); si no, editables
+  const startField = hasChildren
+    ? `<input id="m-start" type="date" value="${cd.start||''}" disabled style="opacity:.6">`
+    : `<input id="m-start" type="date" value="${n.start||''}" ${readOnly?'disabled':''}>`;
+  const endField = hasChildren
+    ? `<input id="m-end" type="date" value="${cd.end||''}" disabled style="opacity:.6">`
+    : `<input id="m-end" type="date" value="${n.end||''}" ${readOnly?'disabled':''}>`;
+  const statusOpts = ['Pendiente','En curso','Completado','Bloqueado']
+    .map(s=>`<option value="${s}" ${n.status===s?'selected':''}>${s}</option>`).join('');
+  showModal(`<h3>${readOnly?'<i class="fas fa-eye"></i>':'<i class="fas fa-edit"></i>'} ${readOnly?'Ver':'Editar'} ${typeLabel(n.type)}: <span style="font-size:14px;font-weight:400;color:var(--text2)">${n.name}</span></h3>
     <div class="form-row"><label>Nombre</label><input id="m-name" value="${n.name.replace(/"/g,'&quot;')}" ${readOnly?'readonly':''}></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Inicio${hasChildren?' (calculado)':''}</label>${startField}</div>
+      <div class="form-row"><label>Término${hasChildren?' (calculado)':''}</label>${endField}</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Horas estimadas</label><input id="m-hours" type="number" min="0" value="${n.hours||0}" ${readOnly||hasChildren?'disabled':''}></div>
+      <div class="form-row"><label>Estado</label><select id="m-status" ${readOnly?'disabled':''}>${statusOpts}</select></div>
+    </div>
     <div class="form-row"><label>Notas</label><textarea id="m-notes" ${readOnly?'readonly':''}>${n.notes||''}</textarea></div>
     <div class="form-row"><label>Responsable(s)</label>${getRespWidgetHTML('responsibles')}</div>
     <div class="form-row"><label>Apoyo</label>${getRespWidgetHTML('support')}</div>
@@ -1253,10 +1508,17 @@ window.openEditModal = function(id) {
 window.saveEdit = function(id) {
   if(!canEdit) return;
   const n=findNode(id); if(!n) return;
-  n.name=document.getElementById('m-name').value.trim();
-  n.notes=document.getElementById('m-notes').value.trim();
-  n.responsibles=[...window._mTeam.responsibles];
-  n.support=[...window._mTeam.support];
+  const hasChildren = n.children && n.children.length > 0;
+  n.name   = document.getElementById('m-name').value.trim();
+  n.notes  = document.getElementById('m-notes').value.trim();
+  n.status = document.getElementById('m-status').value;
+  if(!hasChildren) {
+    n.start = document.getElementById('m-start').value;
+    n.end   = document.getElementById('m-end').value;
+    n.hours = +(document.getElementById('m-hours').value||0);
+  }
+  n.responsibles = [...window._mTeam.responsibles];
+  n.support      = [...window._mTeam.support];
   closeModal(); saveData(); renderAll();
 };
 
