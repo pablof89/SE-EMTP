@@ -118,6 +118,9 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:0
 .tree-table thead th{padding:9px 11px;font-size:10px;font-weight:700;color:var(--text3);text-align:left;text-transform:uppercase;letter-spacing:.07em;border-right:1px solid var(--border);white-space:nowrap}
 .tree-table tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
 .tree-table tbody tr:hover{background:var(--surface2)}
+/* Separación visual entre proyectos en la vista tabla */
+.tree-table tbody tr.row-proyecto td{border-top:3px solid var(--proj);background:var(--proj-bg)}
+.tree-table tbody tr.row-proyecto:first-child td{border-top:none}
 .tree-table td{padding:5px 10px;border-right:1px solid var(--border);vertical-align:middle;font-size:13px}
 .editable{background:transparent;border:1px solid transparent;font-family:inherit;font-size:13px;color:var(--text);width:100%;outline:none;padding:3px 6px;border-radius:5px;transition:all .1s}
 .editable:hover{background:var(--surface2);border-color:var(--border)}
@@ -277,7 +280,24 @@ tr[draggable="true"]:active{cursor:grabbing}
       <input type="password" id="loginPass" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter') attemptLogin()">
     </div>
     <button class="btn btn-primary" id="btnLoginBtn" style="width:100%;height:42px;font-size:14px;font-weight:600" onclick="attemptLogin()"><i class="fas fa-sign-in-alt"></i> Iniciar sesión</button>
+    <div class="toggle-auth" onclick="showRecover()">¿Olvidaste tu contraseña?</div>
     <div class="toggle-auth" onclick="toggleAuthMode()">¿No tienes cuenta? Solicitar acceso</div>
+  </div>
+  <div class="login-box" id="boxRecover" style="display:none">
+    <div class="login-logo">
+      <div class="login-logo-mark">SE</div>
+      <div class="login-logo-text">Tablero SE EMTP<small>Ministerio de Educación de Chile</small></div>
+    </div>
+    <h2>Recuperar contraseña</h2>
+    <p>Te enviaremos una contraseña temporal al correo asociado a tu cuenta</p>
+    <div class="login-error" id="recError"></div>
+    <div class="login-success" id="recSuccess"></div>
+    <div class="form-row">
+      <label>Correo electrónico o usuario</label>
+      <input type="text" id="recEmail" placeholder="correo@mineduc.cl" onkeydown="if(event.key==='Enter') attemptRecover()">
+    </div>
+    <button class="btn btn-primary" id="btnRecBtn" style="width:100%;height:42px;font-size:14px;font-weight:600" onclick="attemptRecover()"><i class="fas fa-envelope"></i> Enviar contraseña temporal</button>
+    <div class="toggle-auth" onclick="showLogin()">Volver a iniciar sesión</div>
   </div>
   <div class="login-box" id="boxRegister" style="display:none">
     <div class="login-logo">
@@ -290,6 +310,10 @@ tr[draggable="true"]:active{cursor:grabbing}
     <div class="form-row">
       <label>Nombre de usuario</label>
       <input type="text" id="regUser" placeholder="Ej: juan.perez" autofocus>
+    </div>
+    <div class="form-row">
+      <label>Correo electrónico</label>
+      <input type="email" id="regEmail" placeholder="correo@mineduc.cl">
     </div>
     <div class="form-row">
       <label>Contraseña</label>
@@ -320,6 +344,7 @@ tr[draggable="true"]:active{cursor:grabbing}
       <span id="userName" style="font-weight:500;color:var(--text)">Usuario</span>
       <span id="userRoleBadge"></span>
     </div>
+    <button class="btn btn-ghost btn-sm" onclick="openChangePasswordModal()" title="Cambiar contraseña"><i class="fas fa-key"></i></button>
     <button class="btn btn-ghost btn-sm" onclick="logout()" title="Cerrar sesión"><i class="fas fa-sign-out-alt"></i></button>
   </div>
 </header>
@@ -371,7 +396,7 @@ tr[draggable="true"]:active{cursor:grabbing}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 // ── CONFIGURACIÓN ─────────────────────────────────────────────────────
-const CLOUD_API_URL = "https://script.google.com/macros/s/AKfycbyXy48z0e905eQdl60vQiEVGTedIPY4eP0oISh_Z7Ify1gUDBFyuVFYvj1jcr_2W_M/exec";
+const CLOUD_API_URL = "https://script.google.com/macros/s/AKfycbzqBk0peotIE0_ukuRzSAbr66nEi_q8Hjdap8QwvqPE-afmL26LMlUiikbxdvN2FhXX/exec";
 
 // Roles disponibles: admin, editor, viewer
 // admin: acceso total + gestión usuarios
@@ -392,6 +417,15 @@ let fileStore = {};
 let collapsed = {};
 let draggedNodeId = null;
 
+// Normaliza el rol a uno de los valores canónicos: 'admin' | 'editor' | 'viewer'.
+// Tolera mayúsculas, espacios y sinónimos comunes guardados en el backend.
+function normalizeRole(role) {
+  const r = String(role || '').trim().toLowerCase();
+  if(r === 'admin' || r === 'administrador') return 'admin';
+  if(r === 'editor' || r === 'edit' || r === 'editar') return 'editor';
+  return 'viewer';
+}
+
 // ── UI HELPERS ────────────────────────────────────────────────────────
 function showModal(html) {
   document.getElementById('modalContainer').innerHTML =
@@ -409,13 +443,93 @@ function showToast(msg, type='default', duration=3500) {
 }
 
 // ── AUTENTICACIÓN ─────────────────────────────────────────────────────
+function showAuthBox(which) {
+  ['boxLogin','boxRegister','boxRecover'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.display = (id===which)?'block':'none';
+  });
+  ['loginError','regError','loginSuccess','recError','recSuccess'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.display='none';
+  });
+}
 function toggleAuthMode() {
-  const isLogin = document.getElementById('boxLogin').style.display !== 'none';
-  document.getElementById('boxLogin').style.display = isLogin ? 'none' : 'block';
-  document.getElementById('boxRegister').style.display = isLogin ? 'block' : 'none';
-  document.getElementById('loginError').style.display = 'none';
-  document.getElementById('regError').style.display = 'none';
-  document.getElementById('loginSuccess').style.display = 'none';
+  const onLogin = document.getElementById('boxLogin').style.display !== 'none';
+  showAuthBox(onLogin ? 'boxRegister' : 'boxLogin');
+}
+function showRecover(){ showAuthBox('boxRecover'); }
+function showLogin(){ showAuthBox('boxLogin'); }
+
+async function attemptRecover() {
+  const idf = document.getElementById('recEmail').value.trim();
+  const err = document.getElementById('recError');
+  const succ = document.getElementById('recSuccess');
+  const btn = document.getElementById('btnRecBtn');
+  err.style.display='none'; succ.style.display='none';
+  if(!idf){ err.textContent='Ingresa tu correo o usuario'; err.style.display='block'; return; }
+  btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Enviando...'; btn.disabled=true;
+  try {
+    const res = await fetch(CLOUD_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'recoverPassword', email:idf, user:idf })
+    });
+    const result = await res.json();
+    if(result.status === 'success') {
+      succ.textContent = result.message || 'Te enviamos una contraseña temporal a tu correo.';
+      succ.style.display = 'block';
+    } else {
+      err.textContent = result.message || 'No se pudo procesar la solicitud';
+      err.style.display = 'block';
+    }
+  } catch(e) {
+    err.textContent = 'Error de conexión. Intenta nuevamente.';
+    err.style.display = 'block';
+  }
+  btn.innerHTML='<i class="fas fa-envelope"></i> Enviar contraseña temporal'; btn.disabled=false;
+}
+
+function openChangePasswordModal() {
+  showModal(`<h3><i class="fas fa-key"></i> Cambiar contraseña</h3>
+    <div class="login-error" id="cpError" style="display:none"></div>
+    <div class="form-row"><label>Contraseña actual</label><input type="password" id="cp-current" placeholder="Tu contraseña actual"></div>
+    <div class="form-row"><label>Nueva contraseña</label><input type="password" id="cp-new" placeholder="Mínimo 4 caracteres"></div>
+    <div class="form-row"><label>Repetir nueva contraseña</label><input type="password" id="cp-confirm" placeholder="Repite la nueva contraseña"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="cpBtn" onclick="attemptChangePassword()"><i class="fas fa-save"></i> Guardar</button>
+    </div>`);
+}
+
+async function attemptChangePassword() {
+  const cur = document.getElementById('cp-current').value;
+  const nw  = document.getElementById('cp-new').value;
+  const cf  = document.getElementById('cp-confirm').value;
+  const err = document.getElementById('cpError');
+  const btn = document.getElementById('cpBtn');
+  const showErr = m => { err.textContent=m; err.style.display='block'; };
+  err.style.display='none';
+  if(!cur || !nw || !cf) return showErr('Completa todos los campos');
+  if(cur !== currentPass) return showErr('La contraseña actual no es correcta');
+  if(nw.length < 4) return showErr('La nueva contraseña debe tener al menos 4 caracteres');
+  if(nw !== cf) return showErr('Las contraseñas nuevas no coinciden');
+  btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Guardando...'; btn.disabled=true;
+  try {
+    const res = await fetch(CLOUD_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'changePassword', user:currentUser, pass:cur, newPass:nw })
+    });
+    const result = await res.json();
+    if(result.status === 'success') {
+      // Actualizamos la credencial en memoria y la sesión guardada.
+      currentPass = nw;
+      try { localStorage.setItem('emtp_session', JSON.stringify({ user:currentUser, pass:nw })); } catch(e){}
+      closeModal();
+      showToast('Contraseña actualizada correctamente', 'success');
+    } else {
+      showErr(result.message || 'No se pudo actualizar la contraseña');
+    }
+  } catch(e) {
+    showErr('Error de conexión. Intenta nuevamente.');
+  }
+  if(btn){ btn.innerHTML='<i class="fas fa-save"></i> Guardar'; btn.disabled=false; }
 }
 
 async function attemptLogin() {
@@ -438,9 +552,13 @@ async function attemptLogin() {
       if(result.payload.users) users = result.payload.users;
       if(result.payload.teams) teams = result.payload.teams;
       const userObj = users[currentUser];
-      currentRole = userObj ? (userObj.role || 'viewer') : 'viewer';
+      // Normalizamos el rol (minúsculas + sin espacios) para evitar que variantes
+      // como "Editor", "EDITOR" o " editor " degraden al usuario a solo lectura.
+      currentRole = userObj ? normalizeRole(userObj.role) : 'viewer';
       isAdmin = currentRole === 'admin';
       canEdit = currentRole === 'admin' || currentRole === 'editor';
+      // Guardamos la sesión para no volver a pedir credenciales al recargar la página.
+      try { localStorage.setItem('emtp_session', JSON.stringify({ user, pass })); } catch(e){}
       iniciarApp();
     } else {
       err.textContent = result.message || 'Credenciales incorrectas';
@@ -455,16 +573,19 @@ async function attemptLogin() {
 
 async function attemptRegister() {
   const newuser = document.getElementById('regUser').value.trim();
+  const newemail = document.getElementById('regEmail').value.trim();
   const newpass = document.getElementById('regPass').value;
   const err = document.getElementById('regError');
   const btn = document.getElementById('btnRegBtn');
-  if(!newuser || !newpass){ err.textContent='Completa todos los campos'; err.style.display='block'; return; }
+  if(!newuser || !newemail || !newpass){ err.textContent='Completa todos los campos (incluido el correo)'; err.style.display='block'; return; }
+  // El correo es obligatorio y se usará para recuperar la contraseña.
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newemail)){ err.textContent='Ingresa un correo electrónico válido'; err.style.display='block'; return; }
   err.style.display='none';
   btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Enviando...'; btn.disabled=true;
   try {
     const res = await fetch(CLOUD_API_URL, {
       method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'register', newUser:newuser, newPass:newpass })
+      body: JSON.stringify({ action:'register', newUser:newuser, newPass:newpass, newEmail:newemail })
     });
     const result = await res.json();
     if(result.status === 'success') {
@@ -502,6 +623,7 @@ function iniciarApp() {
     if(!n.support) n.support = [];
     if(!n.deps) n.deps = [];
     if(!n.notes) n.notes = '';
+    if(!n.files) n.files = [];
     if(!n.children) n.children = [];
   });
   // Normalizar formatos de fecha que puedan venir de la API en DD/MM/YYYY u otros formatos
@@ -511,6 +633,8 @@ function iniciarApp() {
 }
 
 function logout() {
+  // Al cerrar sesión borramos la sesión guardada: la próxima carga sí pedirá login.
+  try { localStorage.removeItem('emtp_session'); } catch(e){}
   currentUser=null; currentPass=null; isAdmin=false; canEdit=false; currentRole='viewer';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('mainApp').style.display='none';
@@ -518,6 +642,7 @@ function logout() {
   document.getElementById('loginPass').value='';
   document.getElementById('loginError').style.display='none';
   document.getElementById('loginSuccess').style.display='none';
+  showAuthBox('boxLogin');
 }
 
 // ── ADMINISTRACIÓN DE USUARIOS ────────────────────────────────────────
@@ -616,8 +741,10 @@ async function uploadFileToDrive(id) {
       });
       const result = await res.json();
       if(result.status === 'success') {
-        if(!fileStore[id]) fileStore[id]=[];
-        fileStore[id].push({ name:result.name, url:result.url, nodeId:id });
+        // Persistimos el archivo en el propio nodo para conservar la asociación al recargar.
+        const node = findNode(id);
+        if(node){ if(!node.files) node.files=[]; node.files.push({ name:result.name, url:result.url }); }
+        saveData();
         // Refresh global file list too
         await loadFilesFromDrive();
         showToast('Archivo subido correctamente', 'success');
@@ -630,7 +757,7 @@ async function uploadFileToDrive(id) {
 }
 
 function openFilesModal(id) {
-  const n = findNode(id); const files = fileStore[id] || [];
+  const n = findNode(id); const files = getNodeFiles(id);
   let fileList = files.map(f=>`<li style="margin-bottom:8px"><a href="${f.url}" target="_blank" style="color:var(--accent);text-decoration:none"><i class="fas fa-external-link-alt"></i> ${f.name}</a></li>`).join('');
   const uploadSection = canEdit ? `<div class="form-row" style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px"><label>Subir nuevo archivo</label><input type="file" id="fileUpload" style="padding:6px;background:var(--surface2)"></div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button><button class="btn btn-primary" id="btnUpload" onclick="uploadFileToDrive('${id}')"><i class="fas fa-cloud-upload-alt"></i> Subir a Drive</button></div>` 
@@ -815,7 +942,7 @@ function renderTabla() {
       const suppHtml=(n.support||[]).map(r=>`<span style="font-size:11px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;white-space:nowrap">${r}</span>`).join(' ');
       const teamHtml=[respHtml,suppHtml].filter(Boolean).join(' ')||`<span style="color:var(--text3);font-size:13px">—</span>`;
       const editableAttrs = canEdit ? '' : 'disabled readonly style="pointer-events:none;opacity:.7"';
-      rows+=`<tr data-id="${n.id}" ${canEdit?`draggable="true" ondragstart="handleDragStart(event,'${n.id}')" ondragend="handleDragEnd(event)" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'${n.id}')"`:''}>
+      rows+=`<tr data-id="${n.id}" class="${n.type==='proyecto'?'row-proyecto':''}" ${canEdit?`draggable="true" ondragstart="handleDragStart(event,'${n.id}')" ondragend="handleDragEnd(event)" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'${n.id}')"`:''}>
         <td><div class="name-cell" style="padding-left:${indent}px">
           ${canEdit?`<span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>`:''}
           ${hasC?`<button class="toggle-btn" onclick="toggleCollapse('${n.id}')"><i class="fas fa-chevron-${isCol?'right':'down'}"></i></button>`:`<span class="no-toggle"></span>`}
@@ -830,7 +957,7 @@ function renderTabla() {
         <td><select class="editable" onchange="updateField('${n.id}','status',this.value)" ${!canEdit?'disabled':''}>${['Pendiente','En curso','Completado','Bloqueado'].map(s=>`<option ${n.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
         <td>${pct!==null?`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:var(--text3);min-width:28px">${pct}%</span><div class="pct-bar-wrap"><div class="pct-bar" style="width:${pct}%"></div></div></div>`:'—'}</td>
         <td><div class="dep-tags" ${canEdit?`onclick="openDepsModal('${n.id}')"`:''}>${depNames.length?depNames.map(d=>`<span class="dep-tag" title="${d}">${d.slice(0,14)}</span>`).join(''):`<span class="dep-add">${canEdit?'+ dep':'—'}</span>`}</div></td>
-        <td><span class="file-badge" onclick="openFilesModal('${n.id}')">${(fileStore[n.id]||[]).length||'+'}</span></td>
+        <td><span class="file-badge" onclick="openFilesModal('${n.id}')">${getNodeFiles(n.id).length||'+'}</span></td>
         <td><div style="display:flex;gap:4px">
           ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn btn-danger btn-sm" onclick="deleteNode('${n.id}')"><i class="fas fa-trash"></i></button>`:`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-eye"></i></button>`}
         </div></td>
@@ -946,7 +1073,10 @@ function renderGantt() {
         const color = ov ? 'var(--danger)' : barColors[n.type]||'var(--accent)';
         const pct   = n.type!=='tarea' ? pctDone([n]) : null;
         const progress = pct!==null ? `<div style="position:absolute;left:0;top:0;height:100%;width:${pct}%;background:rgba(255,255,255,.22);border-radius:4px 0 0 4px"></div>` : '';
-        barHTML = `<div class="gantt-bar" style="left:${leftPx}px;width:${widthPx}px;background:${color}" onclick="openEditModal('${n.id}')" title="${n.name}: ${formatDate(cd.start)} → ${formatDate(cd.end)}${pct!==null?' ('+pct+'%)':''}">${progress}${n.name.slice(0,22)}</div>`;
+        const respList = (n.responsibles||[]).join(', ') || '—';
+        const suppList = (n.support||[]).join(', ') || '—';
+        const tip = `${n.name}: ${formatDate(cd.start)} → ${formatDate(cd.end)}${pct!==null?' ('+pct+'%)':''}&#10;Responsables: ${respList}&#10;Apoyo: ${suppList}`;
+        barHTML = `<div class="gantt-bar" style="left:${leftPx}px;width:${widthPx}px;background:${color}" onclick="openEditModal('${n.id}')" title="${tip}">${progress}${n.name.slice(0,22)}</div>`;
       }
     }
     return `<div class="gantt-row">
@@ -1092,7 +1222,9 @@ function kanbanColDrop(e, newStatus) {
 // ── VISTA EQUIPO (CORREGIDA) ──────────────────────────────────────────
 function getTeamMembers() {
   const assigned = getAllNodes(data).flatMap(n=>[...(n.responsibles||[]),...(n.support||[])]).filter(Boolean);
-  const registered = Object.keys(users).filter(u=>u!=='admin'&&users[u].role!=='admin'&&users[u].status==='approved');
+  // Incluimos a TODOS los usuarios aprobados (incluidos administradores) para que
+  // cualquier usuario creado en la aplicación se refleje en la vista Equipo.
+  const registered = Object.keys(users).filter(u=>users[u].status==='approved');
   const registeredNames = registered.map(u=>users[u].name||u);
   return [...new Set([...assigned,...registeredNames])].sort();
 }
@@ -1312,6 +1444,18 @@ function renderReportes() {
 }
 
 // ── VISTA ARCHIVOS ────────────────────────────────────────────────────
+// Devuelve los archivos asociados a un nodo, combinando los persistidos en
+// node.files (se guardan con saveData y sobreviven a la recarga) con los que
+// pudieran estar sólo en memoria (fileStore), sin duplicar por URL.
+function getNodeFiles(id) {
+  const n = findNode(id);
+  const persisted = (n && n.files) || [];
+  const inMemory = fileStore[id] || [];
+  const merged = [...persisted];
+  inMemory.forEach(f => { if(!merged.find(x=>x.url===f.url)) merged.push(f); });
+  return merged;
+}
+
 function getProjectForNode(id) {
   let n = findNode(id);
   if(!n) return null;
@@ -1326,7 +1470,7 @@ function renderArchivos() {
   // Merge per-node files into a flat list with project context
   const perNodeFiles = [];
   getAllNodes(data).forEach(n => {
-    (fileStore[n.id]||[]).forEach(f => {
+    getNodeFiles(n.id).forEach(f => {
       perNodeFiles.push({ ...f, nodeId:n.id, nodeName:n.name, projectName: getProjectForNode(n.id) });
     });
   });
@@ -1336,12 +1480,18 @@ function renderArchivos() {
     if(!allFiles.find(x=>x.url===f.url)) allFiles.push({ ...f, nodeId:null, nodeName:null, projectName:null });
   });
 
+  // Selector de proyecto obligatorio: cada archivo subido queda asociado a un proyecto.
+  const projOpts = data.filter(n=>n.type==='proyecto')
+    .map(p=>`<option value="${p.id}">${(p.name||'').replace(/"/g,'&quot;')}</option>`).join('');
   const uploadSection = canEdit ? `
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px;background:var(--surface2);border-top:1px solid var(--border)">
-      <span style="font-size:12px;font-weight:600;color:var(--text2)"><i class="fas fa-cloud-upload-alt"></i> Subir archivo al repositorio general:</span>
+      <span style="font-size:12px;font-weight:600;color:var(--text2)"><i class="fas fa-cloud-upload-alt"></i> Subir archivo y asociarlo a un proyecto:</span>
+      <select id="repoProjectSelect" class="filter-select" style="font-size:12px;min-width:180px">
+        <option value="">Selecciona un proyecto…</option>${projOpts}
+      </select>
       <input type="file" id="repoFileInput" style="font-size:12px;flex:1;min-width:200px">
       <button class="btn btn-primary btn-sm" onclick="uploadRepoFile()"><i class="fas fa-upload"></i> Subir</button>
-    </div>` : '';
+    </div>${projOpts?'':'<div style="padding:0 16px 12px;font-size:12px;color:var(--warn)">Crea al menos un proyecto para poder subir archivos asociados.</div>'}` : '';
 
   let html = `<div>
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border)">
@@ -1373,6 +1523,9 @@ function renderArchivos() {
 }
 
 async function uploadRepoFile() {
+  const projSel = document.getElementById('repoProjectSelect');
+  const projectId = projSel ? projSel.value : '';
+  if(!projectId) return showToast('Selecciona un proyecto antes de subir el archivo', 'error');
   const fi = document.getElementById('repoFileInput');
   if(!fi||!fi.files.length) return showToast('Selecciona un archivo', 'error');
   const file = fi.files[0];
@@ -1388,10 +1541,12 @@ async function uploadRepoFile() {
       });
       const result = await res.json();
       if(result.status==='success') {
-        if(!fileStore['global']) fileStore['global']=[];
-        fileStore['global'].push({ name:result.name, url:result.url });
+        // Persistimos el archivo dentro del proyecto elegido para conservar la asociación.
+        const proj = findNode(projectId);
+        if(proj){ if(!proj.files) proj.files=[]; proj.files.push({ name:result.name, url:result.url }); }
+        saveData();
         await loadFilesFromDrive();
-        showToast('Archivo subido al repositorio', 'success');
+        showToast('Archivo subido y asociado al proyecto', 'success');
         renderArchivos();
       } else { showToast('Error al subir: '+result.message, 'error'); }
     } catch(err) { showToast('Error de conexión', 'error'); }
@@ -1428,6 +1583,7 @@ function openAddModal(type) {
   showModal(`<h3>Nuevo ${typeLabel(type)}</h3>
     ${parentHtml}
     <div class="form-row"><label>Nombre</label><input id="m-name" autofocus placeholder="Nombre del ${typeLabel(type).toLowerCase()}"></div>
+    ${type==='proyecto'?`<div class="form-row"><label>Objetivo del proyecto</label><textarea id="m-objetivo" placeholder="Describe el objetivo de este proyecto"></textarea></div>`:''}
     <div class="form-grid">
       <div class="form-row"><label>Inicio</label><input id="m-start" type="date"></div>
       <div class="form-row"><label>Fin</label><input id="m-end" type="date"></div>
@@ -1458,6 +1614,7 @@ function addNode(type) {
     hours:+(document.getElementById('m-hours')?.value||8),
     responsibles:[...window._mTeam.responsibles],
     support:[...window._mTeam.support],
+    objetivo:(document.getElementById('m-objetivo')?.value||'').trim(),
     status:'Pendiente', notes:'', deps:[], children:[]
   };
   if(type==='actividad') {
@@ -1497,6 +1654,7 @@ window.openEditModal = function(id) {
       <div class="form-row"><label>Horas estimadas</label><input id="m-hours" type="number" min="0" value="${n.hours||0}" ${readOnly||hasChildren?'disabled':''}></div>
       <div class="form-row"><label>Estado</label><select id="m-status" ${readOnly?'disabled':''}>${statusOpts}</select></div>
     </div>
+    ${n.type==='proyecto'?`<div class="form-row"><label>Objetivo del proyecto</label><textarea id="m-objetivo" placeholder="Describe el objetivo de este proyecto" ${readOnly?'readonly':''}>${n.objetivo||''}</textarea></div>`:''}
     <div class="form-row"><label>Notas</label><textarea id="m-notes" ${readOnly?'readonly':''}>${n.notes||''}</textarea></div>
     <div class="form-row"><label>Responsable(s)</label>${getRespWidgetHTML('responsibles')}</div>
     <div class="form-row"><label>Apoyo</label>${getRespWidgetHTML('support')}</div>
@@ -1512,6 +1670,8 @@ window.saveEdit = function(id) {
   n.name   = document.getElementById('m-name').value.trim();
   n.notes  = document.getElementById('m-notes').value.trim();
   n.status = document.getElementById('m-status').value;
+  const objEl = document.getElementById('m-objetivo');
+  if(objEl) n.objetivo = objEl.value.trim();
   if(!hasChildren) {
     n.start = document.getElementById('m-start').value;
     n.end   = document.getElementById('m-end').value;
@@ -1641,6 +1801,19 @@ function exportXLSX() {
 document.getElementById('loginScreen').style.display='flex';
 // syncLoadFromCloud era llamado al inicio pero no estaba definido — bug corregido.
 // El login carga los datos directamente desde la API de Google.
+
+// Restaurar sesión: si hay credenciales guardadas, iniciamos sesión automáticamente
+// para que al recargar la página no se pida usuario/contraseña otra vez.
+(function restoreSession(){
+  try {
+    const saved = JSON.parse(localStorage.getItem('emtp_session') || 'null');
+    if(saved && saved.user && saved.pass){
+      document.getElementById('loginUser').value = saved.user;
+      document.getElementById('loginPass').value = saved.pass;
+      attemptLogin(); // si las credenciales ya no son válidas, mostrará el login normal
+    }
+  } catch(e){}
+})();
 </script>
 </body>
 </html>
