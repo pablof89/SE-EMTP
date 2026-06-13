@@ -435,7 +435,7 @@ function closeModal() { document.getElementById('modalContainer').innerHTML = ''
 function overlayClose(e) { if(e.target.classList.contains('modal-overlay')) closeModal(); }
 function showToast(msg, type='default', duration=3500) {
   const t = document.createElement('div');
-  const bg = type==='error' ? 'var(--danger)' : type==='success' ? 'var(--success)' : 'var(--text)';
+  const bg = type==='error' ? 'var(--danger)' : type==='success' ? 'var(--success)' : type==='warn' ? 'var(--warn)' : 'var(--text)';
   t.style.cssText = `position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:${bg};color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);transition:opacity .3s`;
   t.textContent = msg;
   document.body.appendChild(t);
@@ -520,7 +520,7 @@ async function attemptChangePassword() {
     if(result.status === 'success') {
       // Actualizamos la credencial en memoria y la sesión guardada.
       currentPass = nw;
-      try { localStorage.setItem('emtp_session', JSON.stringify({ user:currentUser, pass:nw })); } catch(e){}
+      try { localStorage.setItem('emtp_session', JSON.stringify({ user:currentUser, pass:nw, data, users, teams })); } catch(e){}
       closeModal();
       showToast('Contraseña actualizada correctamente', 'success');
     } else {
@@ -557,8 +557,8 @@ async function attemptLogin() {
       currentRole = userObj ? normalizeRole(userObj.role) : 'viewer';
       isAdmin = currentRole === 'admin';
       canEdit = currentRole === 'admin' || currentRole === 'editor';
-      // Guardamos la sesión para no volver a pedir credenciales al recargar la página.
-      try { localStorage.setItem('emtp_session', JSON.stringify({ user, pass })); } catch(e){}
+      // Guardamos sesión completa (credenciales + payload) para restaurar sin red al recargar.
+      try { localStorage.setItem('emtp_session', JSON.stringify({ user, pass, data, users, teams })); } catch(e){}
       iniciarApp();
     } else {
       err.textContent = result.message || 'Credenciales incorrectas';
@@ -743,7 +743,7 @@ async function uploadFileToDrive(id) {
       if(result.status === 'success') {
         // Persistimos el archivo en el propio nodo para conservar la asociación al recargar.
         const node = findNode(id);
-        if(node){ if(!node.files) node.files=[]; node.files.push({ name:result.name, url:result.url }); }
+        if(node){ if(!node.files) node.files=[]; node.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString() }); }
         saveData();
         // Refresh global file list too
         await loadFilesFromDrive();
@@ -887,9 +887,31 @@ function switchView(view, btn) {
   renderAll();
 }
 
+// Valida que end no sea anterior a start. Si lo es, devuelve el día siguiente
+// al start como end corregido y retorna true en 'fixed'.
+function validateDates(start, end) {
+  if(!start || !end) return { start, end, fixed:false };
+  if(end >= start) return { start, end, fixed:false };
+  const d = new Date(start); d.setDate(d.getDate()+1);
+  const corrected = d.toISOString().slice(0,10);
+  return { start, end:corrected, fixed:true };
+}
+
 function updateField(id,field,val) {
   if(!canEdit) return showToast('No tienes permisos para editar', 'error');
-  const n=findNode(id); if(n){ n[field]=val; saveData(); renderAll(); }
+  const n=findNode(id);
+  if(n){
+    n[field]=val;
+    // Al cambiar inicio o fin, validar que fin no sea anterior a inicio.
+    if(field==='start' || field==='end'){
+      const r=validateDates(n.start, n.end);
+      if(r.fixed){
+        n.end=r.end;
+        showToast(`La fecha de término se ajustó automáticamente al ${r.end.split('-').reverse().join('/')}`, 'warn');
+      }
+    }
+    saveData(); renderAll();
+  }
 }
 function deleteNode(id) {
   if(!canEdit) return showToast('No tienes permisos para eliminar', 'error');
@@ -1466,57 +1488,105 @@ function getProjectForNode(id) {
 }
 
 function renderArchivos() {
-  const globalFiles = fileStore['global'] || [];
-  // Merge per-node files into a flat list with project context
-  const perNodeFiles = [];
-  getAllNodes(data).forEach(n => {
-    getNodeFiles(n.id).forEach(f => {
-      perNodeFiles.push({ ...f, nodeId:n.id, nodeName:n.name, projectName: getProjectForNode(n.id) });
+  // Construir mapa proyecto → archivos (incluye archivos de actividades/tareas hijas)
+  const projMap = {}; // {proyectoId: {name, files:[]}}
+  const sinProyecto = [];
+
+  data.filter(n=>n.type==='proyecto').forEach(p=>{
+    projMap[p.id] = { name:p.name, files:[] };
+    // Archivos del propio proyecto y de todos sus descendientes
+    getAllNodes([p]).forEach(n=>{
+      getNodeFiles(n.id).forEach(f=>{
+        projMap[p.id].files.push({ ...f, nodeName:n.name, isProject:n.id===p.id });
+      });
     });
-  });
-  const allFiles = [...perNodeFiles];
-  // Add global files not already listed
-  globalFiles.forEach(f => {
-    if(!allFiles.find(x=>x.url===f.url)) allFiles.push({ ...f, nodeId:null, nodeName:null, projectName:null });
+    // Ordenar alfabéticamente por nombre
+    projMap[p.id].files.sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
   });
 
-  // Selector de proyecto obligatorio: cada archivo subido queda asociado a un proyecto.
+  // Archivos de nodos que no son descendientes de ningún proyecto
+  getAllNodes(data).forEach(n=>{
+    if(n.type==='proyecto') return;
+    if(getProjectForNode(n.id)) return; // ya cubierto en projMap
+    getNodeFiles(n.id).forEach(f=>{ sinProyecto.push({ ...f, nodeName:n.name }); });
+  });
+  // Archivos globales (Drive)
+  (fileStore['global']||[]).forEach(f=>{
+    const yaListado = Object.values(projMap).some(p=>p.files.find(x=>x.url===f.url)) || sinProyecto.find(x=>x.url===f.url);
+    if(!yaListado) sinProyecto.push(f);
+  });
+  sinProyecto.sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+
+  const totalFiles = Object.values(projMap).reduce((s,p)=>s+p.files.length,0) + sinProyecto.length;
+
+  function fileIcon(name) {
+    const ext=(name||'').split('.').pop().toLowerCase();
+    return ext==='pdf'?'fa-file-pdf':ext==='xlsx'||ext==='xls'?'fa-file-excel':ext==='docx'||ext==='doc'?'fa-file-word':ext==='pptx'||ext==='ppt'?'fa-file-powerpoint':ext==='jpg'||ext==='png'||ext==='jpeg'||ext==='gif'?'fa-file-image':'fa-file';
+  }
+  function fmtDate(iso) {
+    if(!iso) return '';
+    try { return new Date(iso).toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric'}); } catch(e){ return ''; }
+  }
+  function fileRow(f) {
+    const dateStr = fmtDate(f.uploadedAt);
+    const nodeTag = f.nodeName ? `<span style="font-size:10px;color:var(--text3)">${f.nodeName}</span>` : '';
+    return `<div class="repo-file-row">
+      <i class="fas ${fileIcon(f.name)}" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name||'—'}</div>
+        <div style="display:flex;gap:8px;margin-top:2px;flex-wrap:wrap;align-items:center">
+          ${nodeTag}
+          ${dateStr?`<span style="font-size:10px;color:var(--text3)"><i class="fas fa-calendar-alt" style="margin-right:3px"></i>${dateStr}</span>`:''}
+        </div>
+      </div>
+      <a href="${f.url}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0"><i class="fas fa-external-link-alt"></i> Abrir</a>
+    </div>`;
+  }
+
+  // Selector de proyecto obligatorio para subir
   const projOpts = data.filter(n=>n.type==='proyecto')
     .map(p=>`<option value="${p.id}">${(p.name||'').replace(/"/g,'&quot;')}</option>`).join('');
   const uploadSection = canEdit ? `
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px;background:var(--surface2);border-top:1px solid var(--border)">
-      <span style="font-size:12px;font-weight:600;color:var(--text2)"><i class="fas fa-cloud-upload-alt"></i> Subir archivo y asociarlo a un proyecto:</span>
+      <span style="font-size:12px;font-weight:600;color:var(--text2)"><i class="fas fa-cloud-upload-alt"></i> Subir archivo al proyecto:</span>
       <select id="repoProjectSelect" class="filter-select" style="font-size:12px;min-width:180px">
         <option value="">Selecciona un proyecto…</option>${projOpts}
       </select>
       <input type="file" id="repoFileInput" style="font-size:12px;flex:1;min-width:200px">
       <button class="btn btn-primary btn-sm" onclick="uploadRepoFile()"><i class="fas fa-upload"></i> Subir</button>
-    </div>${projOpts?'':'<div style="padding:0 16px 12px;font-size:12px;color:var(--warn)">Crea al menos un proyecto para poder subir archivos asociados.</div>'}` : '';
+    </div>` : '';
 
   let html = `<div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border)">
-      <h3 style="font-size:15px;font-weight:700">Repositorio de Archivos <span style="font-size:12px;font-weight:400;color:var(--text3)">(${allFiles.length} archivos)</span></h3>
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border)">
+      <h3 style="font-size:15px;font-weight:700">Repositorio de Archivos <span style="font-size:12px;font-weight:400;color:var(--text3)">(${totalFiles} archivos)</span></h3>
     </div>`;
 
-  if(!allFiles.length) {
+  if(!totalFiles) {
     html += '<div class="empty"><i class="fas fa-folder-open"></i>No hay archivos en el repositorio.<br><span style="font-size:12px">Sube archivos desde el botón del clip en la tabla, o desde aquí abajo.</span></div>';
   } else {
-    html += '<div>';
-    allFiles.forEach(f => {
-      const ext = (f.name||'').split('.').pop().toLowerCase();
-      const iconClass = ext==='pdf'?'fa-file-pdf':ext==='xlsx'||ext==='xls'?'fa-file-excel':ext==='docx'||ext==='doc'?'fa-file-word':ext==='pptx'||ext==='ppt'?'fa-file-powerpoint':ext==='jpg'||ext==='png'||ext==='jpeg'?'fa-file-image':'fa-file';
-      const projBadge = f.projectName ? `<span class="repo-file-proj">${f.projectName.slice(0,24)}</span>` : '';
-      const nodeBadge = f.nodeName && f.nodeName!==f.projectName ? `<span style="font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 6px">${f.nodeName.slice(0,22)}</span>` : '';
-      html += `<div class="repo-file-row">
-        <i class="fas ${iconClass}" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
-          <div style="display:flex;gap:5px;margin-top:3px;flex-wrap:wrap">${projBadge}${nodeBadge}</div>
+    // Sección por proyecto
+    Object.values(projMap).forEach(p=>{
+      if(!p.files.length) return;
+      html += `<div style="border-bottom:1px solid var(--border)">
+        <div style="padding:10px 18px;background:var(--proj-bg);display:flex;align-items:center;gap:8px">
+          <i class="fas fa-folder" style="color:var(--proj)"></i>
+          <span style="font-weight:700;font-size:13px;color:var(--proj)">${p.name}</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:4px">(${p.files.length} ${p.files.length===1?'archivo':'archivos'})</span>
         </div>
-        <a href="${f.url}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0"><i class="fas fa-external-link-alt"></i> Abrir</a>
+        ${p.files.map(f=>fileRow(f)).join('')}
       </div>`;
     });
-    html += '</div>';
+    // Archivos sin proyecto
+    if(sinProyecto.length) {
+      html += `<div>
+        <div style="padding:10px 18px;background:var(--surface2);display:flex;align-items:center;gap:8px">
+          <i class="fas fa-folder-open" style="color:var(--text3)"></i>
+          <span style="font-weight:700;font-size:13px;color:var(--text3)">Sin proyecto</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:4px">(${sinProyecto.length})</span>
+        </div>
+        ${sinProyecto.map(f=>fileRow(f)).join('')}
+      </div>`;
+    }
   }
   html += uploadSection + '</div>';
   document.getElementById('viewArchivos').innerHTML = html;
@@ -1543,7 +1613,7 @@ async function uploadRepoFile() {
       if(result.status==='success') {
         // Persistimos el archivo dentro del proyecto elegido para conservar la asociación.
         const proj = findNode(projectId);
-        if(proj){ if(!proj.files) proj.files=[]; proj.files.push({ name:result.name, url:result.url }); }
+        if(proj){ if(!proj.files) proj.files=[]; proj.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString() }); }
         saveData();
         await loadFilesFromDrive();
         showToast('Archivo subido y asociado al proyecto', 'success');
@@ -1607,10 +1677,15 @@ window.updateActDropdown = function() {
 function addNode(type) {
   const name=document.getElementById('m-name').value.trim();
   if(!name) return;
+  const rawDates = validateDates(
+    document.getElementById('m-start').value,
+    document.getElementById('m-end').value
+  );
+  if(rawDates.fixed) showToast(`La fecha de término se ajustó automáticamente al ${rawDates.end.split('-').reverse().join('/')}`, 'warn');
   const node={
     id:genId(), type, name,
-    start:document.getElementById('m-start').value,
-    end:document.getElementById('m-end').value,
+    start:rawDates.start,
+    end:rawDates.end,
     hours:+(document.getElementById('m-hours')?.value||8),
     responsibles:[...window._mTeam.responsibles],
     support:[...window._mTeam.support],
@@ -1673,9 +1748,14 @@ window.saveEdit = function(id) {
   const objEl = document.getElementById('m-objetivo');
   if(objEl) n.objetivo = objEl.value.trim();
   if(!hasChildren) {
-    n.start = document.getElementById('m-start').value;
-    n.end   = document.getElementById('m-end').value;
+    const r = validateDates(
+      document.getElementById('m-start').value,
+      document.getElementById('m-end').value
+    );
+    n.start = r.start;
+    n.end   = r.end;
     n.hours = +(document.getElementById('m-hours').value||0);
+    if(r.fixed) showToast(`La fecha de término se ajustó automáticamente al ${r.end.split('-').reverse().join('/')}`, 'warn');
   }
   n.responsibles = [...window._mTeam.responsibles];
   n.support      = [...window._mTeam.support];
@@ -1802,16 +1882,31 @@ document.getElementById('loginScreen').style.display='flex';
 // syncLoadFromCloud era llamado al inicio pero no estaba definido — bug corregido.
 // El login carga los datos directamente desde la API de Google.
 
-// Restaurar sesión: si hay credenciales guardadas, iniciamos sesión automáticamente
-// para que al recargar la página no se pida usuario/contraseña otra vez.
 (function restoreSession(){
   try {
     const saved = JSON.parse(localStorage.getItem('emtp_session') || 'null');
-    if(saved && saved.user && saved.pass){
-      document.getElementById('loginUser').value = saved.user;
-      document.getElementById('loginPass').value = saved.pass;
-      attemptLogin(); // si las credenciales ya no son válidas, mostrará el login normal
-    }
+    if(!saved || !saved.user || !saved.pass) return;
+    // Restauramos el payload guardado de inmediato — sin red, sin parpadeo de login.
+    currentUser = saved.user; currentPass = saved.pass;
+    if(saved.data)  data  = saved.data;
+    if(saved.users) users = saved.users;
+    if(saved.teams) teams = saved.teams;
+    const userObj = users[currentUser];
+    currentRole = userObj ? normalizeRole(userObj.role) : 'viewer';
+    isAdmin  = currentRole === 'admin';
+    canEdit  = currentRole === 'admin' || currentRole === 'editor';
+    iniciarApp();
+    // Refresco silencioso en segundo plano: valida credenciales y actualiza datos.
+    fetch(CLOUD_API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'login', user:saved.user, pass:saved.pass }) })
+      .then(r=>r.json()).then(result=>{
+        if(result.status !== 'success'){ logout(); return; }
+        if(result.payload.data)  data  = result.payload.data;
+        if(result.payload.users) users = result.payload.users;
+        if(result.payload.teams) teams = result.payload.teams;
+        try { localStorage.setItem('emtp_session', JSON.stringify({ user:saved.user, pass:saved.pass, data, users, teams })); } catch(e){}
+        renderAll();
+      }).catch(()=>{}); // si no hay red, seguimos con los datos en caché
   } catch(e){}
 })();
 </script>
