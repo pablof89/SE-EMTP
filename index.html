@@ -969,6 +969,14 @@ function hasFilteredDescendant(node, f) {
 }
 
 // ── VISTA TABLA ───────────────────────────────────────────────────────
+function getVisibleData() {
+  if(isAdmin || !canEdit) return data;
+  return data.filter(n => {
+    if(n.type === 'proyecto') return getAllNodes([n]).some(c => (c.responsibles||[]).includes(currentUser) || (c.support||[]).includes(currentUser));
+    return (n.responsibles||[]).includes(currentUser) || (n.support||[]).includes(currentUser);
+  });
+}
+
 function renderTabla() {
   const f=getFilters(); let rows='';
   function renderNodes(nodes, level) {
@@ -979,8 +987,13 @@ function renderTabla() {
       const depNames=(n.deps||[]).map(id=>{ const nd=findNode(id); return nd?nd.name:'?'; });
       const ov=isOverdue(n), soon=isDueSoon(n), bl=isBlocked(n), pct=n.type!=='tarea'?pctDone([n]):null;
       let ab='';
-      if(ov) ab+=`<span class="alert-badge">Vencida</span>`;
-      else if(soon) ab+=`<span class="alert-badge warn-badge">Pronto</span>`;
+      if(n.type==='proyecto') {
+        const ovKids = getAllNodes([n]).filter(c=>c.id!==n.id&&isOverdue(c)).length;
+        if(ovKids>0) ab+=`<span class="alert-badge"><i class="fas fa-exclamation-triangle" style="font-size:10px;margin-right:3px"></i>${ovKids} vencida${ovKids>1?'s':''}</span>`;
+      } else {
+        if(ov) ab+=`<span class="alert-badge">Vencida</span>`;
+        else if(soon) ab+=`<span class="alert-badge warn-badge">Pronto</span>`;
+      }
       if(bl) ab+=`<span class="alert-badge" style="background:var(--accent-bg);color:var(--accent)">Bloqueada</span>`;
       const respHtml=(n.responsibles||[]).map(r=>`<span style="font-size:11px;background:var(--accent-bg);color:var(--accent);border-radius:4px;padding:2px 6px;white-space:nowrap">${r}</span>`).join(' ');
       const suppHtml=(n.support||[]).map(r=>`<span style="font-size:11px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;white-space:nowrap">${r}</span>`).join(' ');
@@ -1009,7 +1022,7 @@ function renderTabla() {
       if(hasC && !isCol) renderNodes(n.children, level+1);
     }
   }
-  renderNodes(data, 0);
+  renderNodes(getVisibleData(), 0);
   document.getElementById('viewTabla').innerHTML=`<div style="overflow-x:auto"><table class="tree-table">
     <thead><tr><th style="min-width:320px">Nombre</th><th>Inicio</th><th>Término</th><th>Horas</th><th style="min-width:140px">Personas</th><th>Estado</th><th>Avance</th><th>Dependencias</th><th><i class="fas fa-paperclip"></i></th><th></th></tr></thead>
     <tbody>${rows||`<tr><td colspan="10"><div class="empty"><i class="fas fa-inbox" style="font-size:24px;margin-bottom:8px;display:block"></i>Sin resultados.</div></td></tr>`}</tbody>
@@ -1049,16 +1062,17 @@ function setGanttScale(s) { ganttScale = s; renderGantt(); }
 
 function renderGantt() {
   // Si hay filtro de proyecto, solo mostramos ese proyecto y sus descendientes.
+  const vd = getVisibleData();
   const ganttData = ganttProjectFilter
-    ? data.filter(n=>n.id===ganttProjectFilter)
-    : data;
+    ? vd.filter(n=>n.id===ganttProjectFilter)
+    : vd;
   const allNodes = getAllNodes(ganttData);
   const starts = allNodes.map(n=>computedDates(n).start).filter(Boolean);
   const ends   = allNodes.map(n=>computedDates(n).end).filter(Boolean);
 
   if(!starts.length) {
     // Renderizamos igualmente la toolbar (con selector de proyecto) para no bloquear al usuario.
-    const ganttProjOptsEmpty = data.filter(n=>n.type==='proyecto')
+    const ganttProjOptsEmpty = vd.filter(n=>n.type==='proyecto')
       .map(p=>`<option value="${p.id}" ${ganttProjectFilter===p.id?'selected':''}>${p.name}</option>`).join('');
     document.getElementById('viewGantt').innerHTML = `
       <div class="gantt-toolbar">
@@ -1164,7 +1178,7 @@ function renderGantt() {
   }
   walkNodes(ganttData, 0);
 
-  const ganttProjOpts = data.filter(n=>n.type==='proyecto')
+  const ganttProjOpts = vd.filter(n=>n.type==='proyecto')
     .map(p=>`<option value="${p.id}" ${ganttProjectFilter===p.id?'selected':''}>${p.name}</option>`).join('');
 
   document.getElementById('viewGantt').innerHTML = `
@@ -1220,7 +1234,7 @@ function renderKanban() {
   const statuses = ['Pendiente','En curso','Completado','Bloqueado'];
   const statusColors = { 'Pendiente':'--warn', 'En curso':'--accent', 'Completado':'--success', 'Bloqueado':'--danger' };
   const f = getFilters();
-  const allNodes = getAllNodes(data).filter(n => n.type === 'tarea');
+  const allNodes = getAllNodes(getVisibleData()).filter(n => n.type === 'tarea');
   const filtered = allNodes.filter(n => nodeMatchesFilter(n,f));
 
   const cols = statuses.map(status => {
@@ -1433,19 +1447,20 @@ window.saveResponsable = function(oldName) {
 
 // ── VISTA REPORTES (NUEVA) ────────────────────────────────────────────
 function renderReportes() {
+  const vd = getVisibleData();
   // Aplicar filtro de proyecto: si hay uno seleccionado, solo usamos sus nodos.
   const filteredRoot = reportesProjectFilter
-    ? data.filter(n=>n.id===reportesProjectFilter)
-    : data;
+    ? vd.filter(n=>n.id===reportesProjectFilter)
+    : vd;
   const allNodes = getAllNodes(filteredRoot);
   const tasks = allNodes.filter(n=>n.type==='tarea');
   const totalH = tasks.reduce((s,n)=>s+(n.hours||0),0);
-  const selectedProj = reportesProjectFilter ? data.find(n=>n.id===reportesProjectFilter) : null;
+  const selectedProj = reportesProjectFilter ? vd.find(n=>n.id===reportesProjectFilter) : null;
 
   // Por estado
   const byStatus = ['Pendiente','En curso','Completado','Bloqueado'].map(s=>({ label:s, val:tasks.filter(n=>n.status===s).length }));
   // Por proyecto (solo si se muestran todos)
-  const byProj = data.filter(n=>n.type==='proyecto').map(p=>({ id:p.id, label:p.name, val:getAllNodes([p]).filter(n=>n.type==='tarea').length, pct:pctDone([p]) }));
+  const byProj = vd.filter(n=>n.type==='proyecto').map(p=>({ id:p.id, label:p.name, val:getAllNodes([p]).filter(n=>n.type==='tarea').length, pct:pctDone([p]) }));
   // Por responsable
   const memberCounts = {};
   tasks.forEach(n=>(n.responsibles||[]).forEach(r=>{ memberCounts[r]=(memberCounts[r]||0)+1; }));
@@ -1470,7 +1485,7 @@ function renderReportes() {
     <td style="padding:8px 10px"><div style="display:flex;align-items:center;gap:6px"><div class="pct-bar-wrap" style="width:70px"><div class="pct-bar" style="width:${p.pct}%"></div></div><span style="font-size:12px;color:var(--text3)">${p.pct}%</span></div></td>
   </tr>`).join('');
 
-  const repProjOpts = data.filter(n=>n.type==='proyecto')
+  const repProjOpts = vd.filter(n=>n.type==='proyecto')
     .map(p=>`<option value="${p.id}" ${reportesProjectFilter===p.id?'selected':''}>${p.name}</option>`).join('');
 
   document.getElementById('viewReportes').innerHTML = `
