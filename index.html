@@ -970,7 +970,7 @@ function hasFilteredDescendant(node, f) {
 
 // ── VISTA TABLA ───────────────────────────────────────────────────────
 function getVisibleData() {
-  if(isAdmin || !canEdit) return data;
+  if(isAdmin) return data;
   return data.filter(n => {
     if(n.type === 'proyecto') return getAllNodes([n]).some(c => (c.responsibles||[]).includes(currentUser) || (c.support||[]).includes(currentUser));
     return (n.responsibles||[]).includes(currentUser) || (n.support||[]).includes(currentUser);
