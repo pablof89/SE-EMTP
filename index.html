@@ -743,7 +743,7 @@ async function uploadFileToDrive(id) {
       if(result.status === 'success') {
         // Persistimos el archivo en el propio nodo para conservar la asociación al recargar.
         const node = findNode(id);
-        if(node){ if(!node.files) node.files=[]; node.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString() }); }
+        if(node){ if(!node.files) node.files=[]; node.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString(), uploadedBy:currentUser }); }
         saveData();
         // Refresh global file list too
         await loadFilesFromDrive();
@@ -785,6 +785,26 @@ function computedDates(node) {
   return { start:node.start||'', end:node.end||'' };
 }
 function computedHours(node) { if(node.children && node.children.length>0) return node.children.reduce((s,c)=>s+computedHours(c),0); return node.hours||0; }
+
+// Calcula las horas semanales asignadas a una persona concreta.
+// Por cada tarea donde es responsable: (horas / nº responsables) / nº semanas de la tarea.
+// Permite detectar sobrecarga (>40 h/sem).
+function calcPersonWeeklyHours(name) {
+  const tasks = getAllNodes(data).filter(n => n.type==='tarea' && (n.responsibles||[]).includes(name));
+  let weekly = 0;
+  tasks.forEach(t => {
+    const nResp = Math.max(1, (t.responsibles||[]).length);
+    const hoursForPerson = (t.hours||0) / nResp;
+    // Semanas de duración de la tarea (mínimo 1)
+    let nWeeks = 1;
+    if(t.start && t.end) {
+      const ms = Math.max(0, parseDate(t.end) - parseDate(t.start));
+      nWeeks = Math.max(1, ms / (7 * 24 * 3600 * 1000));
+    }
+    weekly += hoursForPerson / nWeeks;
+  });
+  return Math.round(weekly * 10) / 10; // redondeo a 1 decimal
+}
 
 // Normaliza cualquier formato de fecha a YYYY-MM-DD.
 // Acepta: "YYYY-MM-DD", "DD/MM/YYYY", "DD-MM-YYYY", "MM/DD/YYYY" (ISO americano).
@@ -1035,7 +1055,22 @@ function renderGantt() {
   const ends   = allNodes.map(n=>computedDates(n).end).filter(Boolean);
 
   if(!starts.length) {
-    document.getElementById('viewGantt').innerHTML = '<div class="empty"><i class="fas fa-calendar-alt"></i>No hay fechas configuradas. Define fechas de inicio y fin en los elementos.</div>';
+    // Renderizamos igualmente la toolbar (con selector de proyecto) para no bloquear al usuario.
+    const ganttProjOptsEmpty = data.filter(n=>n.type==='proyecto')
+      .map(p=>`<option value="${p.id}" ${ganttProjectFilter===p.id?'selected':''}>${p.name}</option>`).join('');
+    document.getElementById('viewGantt').innerHTML = `
+      <div class="gantt-toolbar">
+        <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Escala:</span>
+        <button class="gantt-scale-btn ${ganttScale==='dia'?'active':''}" onclick="setGanttScale('dia')">Días</button>
+        <button class="gantt-scale-btn ${ganttScale==='semana'?'active':''}" onclick="setGanttScale('semana')">Semanas</button>
+        <button class="gantt-scale-btn ${ganttScale==='mes'?'active':''}" onclick="setGanttScale('mes')">Meses</button>
+        <div style="width:1px;height:18px;background:var(--border);margin:0 4px"></div>
+        <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Proyecto:</span>
+        <select class="filter-select" style="font-size:12px;height:28px" onchange="ganttProjectFilter=this.value;renderGantt()">
+          <option value="">Todos</option>${ganttProjOptsEmpty}
+        </select>
+      </div>
+      <div class="empty"><i class="fas fa-calendar-alt"></i>No hay fechas configuradas. Define fechas de inicio y fin en los elementos.</div>`;
     return;
   }
 
@@ -1293,14 +1328,15 @@ function renderEquipo() {
     const allTasksForUser = [...new Set([...tasksResp,...tasksSupp])];
     const overdue = allTasksForUser.filter(n=>isOverdue(n)).length;
     const completadas = allTasksForUser.filter(n=>n.status==='Completado').length;
-    const totalH = allTasksForUser.reduce((s,n)=>{ const t=(n.responsibles||[]).length+(n.support||[]).length; return s+(n.hours||0)/Math.max(1,t); },0);
+    const weeklyH = calcPersonWeeklyHours(resp);
+    const overloaded = weeklyH > 40;
     const initials = resp.slice(0,2).toUpperCase();
     const team = getTeamForResp(resp);
     const user = Object.values(users).find(u=>u.name===resp);
     const pctU = allTasksForUser.length ? Math.round(completadas/allTasksForUser.length*100) : 0;
     const safeResp = resp.replace(/'/g,"\\'").replace(/"/g,'&quot;');
 
-    html += `<div class="panel" style="padding:16px">
+    html += `<div class="panel" style="padding:16px${overloaded?';border-top:3px solid var(--danger)':''}">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--accent-bg),var(--proj-bg));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0">${initials}</div>
         <div style="flex:1;min-width:0">
@@ -1308,7 +1344,10 @@ function renderEquipo() {
           ${user&&user.email?`<div style="font-size:11px;color:var(--accent)"><i class="fas fa-envelope"></i> ${user.email}</div>`:''}
           ${team?`<span class="team-badge"><i class="fas fa-users"></i> ${team}</span>`:''}
         </div>
-        ${overdue>0?`<span class="alert-badge">${overdue} venc.</span>`:''}
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+          ${overloaded?`<span class="alert-badge" title="Carga laboral al límite (>${40}h/sem)"><i class="fas fa-exclamation-triangle"></i> Sobrecarga</span>`:''}
+          ${overdue>0?`<span class="alert-badge">${overdue} venc.</span>`:''}
+        </div>
         ${canEdit?`<div style="display:flex;gap:4px">
           <button class="btn btn-ghost btn-sm" onclick="openEditResponsableModal('${safeResp}')" title="Editar"><i class="fas fa-edit"></i></button>
           <button class="btn btn-danger btn-sm" onclick="deletePersona('${safeResp}')" title="Eliminar"><i class="fas fa-user-times"></i></button>
@@ -1319,7 +1358,12 @@ function renderEquipo() {
         <div style="text-align:center;padding:6px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)"><div style="font-size:18px;font-weight:600;color:var(--text2)">${tasksSupp.length}</div><div style="font-size:10px;color:var(--text2)">Apoyo</div></div>
         <div style="text-align:center;padding:6px;background:var(--success-bg);border-radius:var(--radius)"><div style="font-size:18px;font-weight:600;color:var(--success)">${pctU}%</div><div style="font-size:10px;color:var(--success)">Completado</div></div>
       </div>
-      <div style="font-size:11px;color:var(--text3)">~${Math.round(totalH)}h asignadas · ${allTasksForUser.length} tareas totales</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text3)">
+        <span>${allTasksForUser.length} tareas · ${pctU}% completado</span>
+        <span style="font-weight:600;color:${overloaded?'var(--danger)':'var(--text2)'}">
+          <i class="fas fa-clock" style="margin-right:3px"></i>${weeklyH} h/sem
+        </span>
+      </div>
     </div>`;
   }
   html += '</div>';
@@ -1527,7 +1571,7 @@ function renderArchivos() {
     // Archivos del propio proyecto y de todos sus descendientes
     getAllNodes([p]).forEach(n=>{
       getNodeFiles(n.id).forEach(f=>{
-        projMap[p.id].files.push({ ...f, nodeName:n.name, isProject:n.id===p.id });
+        projMap[p.id].files.push({ ...f, nodeId:n.id, nodeName:n.name, isProject:n.id===p.id });
       });
     });
     // Ordenar alfabéticamente por nombre
@@ -1538,7 +1582,7 @@ function renderArchivos() {
   getAllNodes(data).forEach(n=>{
     if(n.type==='proyecto') return;
     if(getProjectForNode(n.id)) return; // ya cubierto en projMap
-    getNodeFiles(n.id).forEach(f=>{ sinProyecto.push({ ...f, nodeName:n.name }); });
+    getNodeFiles(n.id).forEach(f=>{ sinProyecto.push({ ...f, nodeId:n.id, nodeName:n.name }); });
   });
   // Archivos globales (Drive)
   (fileStore['global']||[]).forEach(f=>{
@@ -1560,16 +1604,22 @@ function renderArchivos() {
   function fileRow(f) {
     const dateStr = fmtDate(f.uploadedAt);
     const nodeTag = f.nodeName ? `<span style="font-size:10px;color:var(--text3)">${f.nodeName}</span>` : '';
+    const uploaderTag = f.uploadedBy ? `<span style="font-size:10px;color:var(--text3)"><i class="fas fa-user" style="margin-right:3px"></i>${f.uploadedBy}</span>` : '';
+    const safeUrl = (f.url||'').replace(/'/g,"\\'");
+    const safeNodeId = (f.nodeId||'').replace(/'/g,"\\'");
+    const deleteBtn = isAdmin && f.nodeId ? `<button class="btn btn-danger btn-sm" style="flex-shrink:0" onclick="deleteRepoFile('${safeNodeId}','${safeUrl}')" title="Eliminar archivo"><i class="fas fa-trash"></i></button>` : '';
     return `<div class="repo-file-row">
       <i class="fas ${fileIcon(f.name)}" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name||'—'}</div>
         <div style="display:flex;gap:8px;margin-top:2px;flex-wrap:wrap;align-items:center">
           ${nodeTag}
+          ${uploaderTag}
           ${dateStr?`<span style="font-size:10px;color:var(--text3)"><i class="fas fa-calendar-alt" style="margin-right:3px"></i>${dateStr}</span>`:''}
         </div>
       </div>
       <a href="${f.url}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0"><i class="fas fa-external-link-alt"></i> Abrir</a>
+      ${deleteBtn}
     </div>`;
   }
 
@@ -1643,7 +1693,7 @@ async function uploadRepoFile() {
       if(result.status==='success') {
         // Persistimos el archivo dentro del proyecto elegido para conservar la asociación.
         const proj = findNode(projectId);
-        if(proj){ if(!proj.files) proj.files=[]; proj.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString() }); }
+        if(proj){ if(!proj.files) proj.files=[]; proj.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString(), uploadedBy:currentUser }); }
         saveData();
         await loadFilesFromDrive();
         showToast('Archivo subido y asociado al proyecto', 'success');
@@ -1654,6 +1704,18 @@ async function uploadRepoFile() {
   };
   reader.readAsDataURL(file);
 }
+
+window.deleteRepoFile = function(nodeId, fileUrl) {
+  if(!isAdmin) return showToast('Solo los administradores pueden eliminar archivos', 'error');
+  if(!confirm('¿Eliminar este archivo del repositorio? Esta acción no se puede deshacer.')) return;
+  const node = findNode(nodeId);
+  if(node && node.files) {
+    node.files = node.files.filter(f => f.url !== fileUrl);
+    saveData();
+    showToast('Archivo eliminado', 'success');
+    renderArchivos();
+  }
+};
 
 // ── MODALES DE AGREGAR/EDITAR NODOS ───────────────────────────────────
 window._mTeam = { responsibles:[], support:[] };
