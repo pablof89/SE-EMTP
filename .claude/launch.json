@@ -1,0 +1,1 @@
+{"version":"0.0.1","configurations":[{"name":"static","runtimeExecutable":"python3","runtimeArgs":["/tmp/emtp_serve.py"],"port":8765}]}
