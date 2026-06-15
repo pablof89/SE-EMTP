@@ -794,7 +794,9 @@ function calcPersonWeeklyHours(name) {
   let weekly = 0;
   tasks.forEach(t => {
     const nResp = Math.max(1, (t.responsibles||[]).length);
-    const hoursForPerson = (t.hours||0) / nResp;
+    const hoursForPerson = (t.hoursPerPerson && t.hoursPerPerson[name] != null)
+      ? t.hoursPerPerson[name]
+      : (t.hours||0) / nResp;
     // Semanas de duración de la tarea (mínimo 1)
     let nWeeks = 1;
     if(t.start && t.end) {
@@ -1718,22 +1720,43 @@ window.deleteRepoFile = function(nodeId, fileUrl) {
 };
 
 // ── MODALES DE AGREGAR/EDITAR NODOS ───────────────────────────────────
-window._mTeam = { responsibles:[], support:[] };
-function initRespWidget(respList, suppList) { window._mTeam.responsibles=[...(respList||[])]; window._mTeam.support=[...(suppList||[])]; }
+window._mTeam = { responsibles:[], support:[], hoursPerPerson:{} };
+function initRespWidget(respList, suppList, hpp) {
+  window._mTeam.responsibles=[...(respList||[])];
+  window._mTeam.support=[...(suppList||[])];
+  window._mTeam.hoursPerPerson={...(hpp||{})};
+}
 function getRespWidgetHTML(type) {
   const list = window._mTeam[type];
+  const hpp = window._mTeam.hoursPerPerson;
   let opts = `<option value="">+ Seleccionar...</option>`;
   Object.values(users)
     .filter(u=>!list.includes(u.name)&&u.status==='approved')
     .sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))
     .forEach(u=>{ opts+=`<option value="${(u.name||'').replace(/"/g,'&quot;')}">${u.name}</option>`; });
+  const chips = list.map((r,i)=>{
+    const safeR = r.replace(/'/g,"\\'");
+    const hppInput = type==='responsibles'
+      ? ` <input type="number" min="0" title="Horas para ${r}" value="${hpp[r]??0}" onchange="window._mTeam.hoursPerPerson['${safeR}']=+this.value" style="width:44px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:11px;margin:0 2px">h`
+      : '';
+    return `<span class="resp-chip ${type==='support'?'supp-chip':''}">${r}${hppInput}<button type="button" onclick="removeRespChip('${type}',${i})">×</button></span>`;
+  }).join('');
   return `<div class="resp-wrap" id="respWrap-${type}">
-    ${list.map((r,i)=>`<span class="resp-chip ${type==='support'?'supp-chip':''}">${r}<button type="button" onclick="removeRespChip('${type}',${i})">×</button></span>`).join('')}
+    ${chips}
     <select class="resp-inner" onchange="handleRespSelect(event,'${type}')">${opts}</select>
   </div>`;
 }
-window.removeRespChip = function(type,i) { window._mTeam[type].splice(i,1); document.getElementById(`respWrap-${type}`).outerHTML=getRespWidgetHTML(type); };
-window.handleRespSelect = function(e,type) { const v=e.target.value; if(!v) return; if(!window._mTeam[type].includes(v)){ window._mTeam[type].push(v); } document.getElementById(`respWrap-${type}`).outerHTML=getRespWidgetHTML(type); };
+window.removeRespChip = function(type,i) {
+  const name = window._mTeam[type][i];
+  window._mTeam[type].splice(i,1);
+  if(type==='responsibles') delete window._mTeam.hoursPerPerson[name];
+  document.getElementById(`respWrap-${type}`).outerHTML=getRespWidgetHTML(type);
+};
+window.handleRespSelect = function(e,type) {
+  const v=e.target.value; if(!v) return;
+  if(!window._mTeam[type].includes(v)){ window._mTeam[type].push(v); }
+  document.getElementById(`respWrap-${type}`).outerHTML=getRespWidgetHTML(type);
+};
 
 function openAddModal(type) {
   if(!canEdit) return showToast('Sin permisos para agregar elementos', 'error');
@@ -1784,6 +1807,7 @@ function addNode(type) {
     hours:+(document.getElementById('m-hours')?.value||8),
     responsibles:[...window._mTeam.responsibles],
     support:[...window._mTeam.support],
+    hoursPerPerson:{...window._mTeam.hoursPerPerson},
     objetivo:(document.getElementById('m-objetivo')?.value||'').trim(),
     status:'Pendiente', notes:'', deps:[], children:[]
   };
@@ -1801,7 +1825,7 @@ function addNode(type) {
 
 window.openEditModal = function(id) {
   const n=findNode(id); if(!n) return;
-  initRespWidget(n.responsibles||[], n.support||[]);
+  initRespWidget(n.responsibles||[], n.support||[], n.hoursPerPerson||{});
   const readOnly = !canEdit;
   const cd = computedDates(n);
   const hasChildren = n.children && n.children.length > 0;
@@ -1852,8 +1876,9 @@ window.saveEdit = function(id) {
     n.hours = +(document.getElementById('m-hours').value||0);
     if(r.fixed) showToast(`La fecha de término se ajustó automáticamente al ${r.end.split('-').reverse().join('/')}`, 'warn');
   }
-  n.responsibles = [...window._mTeam.responsibles];
-  n.support      = [...window._mTeam.support];
+  n.responsibles    = [...window._mTeam.responsibles];
+  n.support         = [...window._mTeam.support];
+  n.hoursPerPerson  = {...window._mTeam.hoursPerPerson};
   closeModal(); saveData(); renderAll();
 };
 
