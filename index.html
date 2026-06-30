@@ -143,6 +143,10 @@ tr[draggable="true"]:active{cursor:grabbing}
 .badge-actividad{background:var(--act-bg);color:var(--act)}
 .badge-tarea{background:var(--task-bg);color:var(--task)}
 .name-cell{display:flex;align-items:flex-start;gap:5px;min-width:300px;padding:3px 0}
+.row-add-btns{display:inline-flex;gap:3px;margin-left:4px;opacity:0;transition:opacity .12s}
+tr:hover .row-add-btns{opacity:1}
+.row-add-btn{padding:1px 6px;font-size:10px;line-height:16px;border-radius:4px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap}
+.row-add-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 .toggle-btn{width:17px;height:17px;border:1px solid var(--border2);background:transparent;border-radius:3px;cursor:pointer;font-size:7px;display:flex;align-items:center;justify-content:center;color:var(--text3);flex-shrink:0;transition:background .1s}
 .toggle-btn:hover{background:var(--surface2)}
 .no-toggle{width:17px;flex-shrink:0}
@@ -1011,6 +1015,8 @@ function renderTabla() {
           <div style="margin-top:2px">${typeBadge(n.type)}</div>
           <div class="${canEdit?'editable ':''} name-editable" ${canEdit?`contenteditable="true" onblur="updateField('${n.id}','name',this.innerText.trim())"`:''}>${n.name}</div>
           ${ab}
+          ${canEdit&&n.type!=='tarea'?`<span class="row-add-btns">${n.type==='proyecto'?`<button class="row-add-btn" onclick="event.stopPropagation();openAddModalUnder('actividad','${n.id}')" title="Nueva actividad"><i class="fas fa-plus"></i> Act</button>`:''}
+            <button class="row-add-btn" onclick="event.stopPropagation();openAddModalUnder('tarea','${n.id}')" title="Nueva tarea"><i class="fas fa-plus"></i> Tar</button></span>`:''}
         </div></td>
         <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.start)}</span>`:`<input type="date" class="editable" value="${n.start||''}" onchange="updateField('${n.id}','start',this.value)" ${!canEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
         <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.end)}</span>`:`<input type="date" class="editable" value="${n.end||''}" onchange="updateField('${n.id}','end',this.value)" ${!canEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
@@ -1740,6 +1746,31 @@ window.deleteRepoFile = function(nodeId, fileUrl) {
 };
 
 // ── MODALES DE AGREGAR/EDITAR NODOS ───────────────────────────────────
+// ── CREAR HIJO DESDE FILA ────────────────────────────────────────────
+window.openAddModalUnder = function(type, parentId) {
+  openAddModal(type);
+  const parent = findNode(parentId);
+  if(!parent) return;
+  if(type === 'actividad') {
+    const sel = document.getElementById('m-parent-proj');
+    if(sel) sel.value = parentId;
+  } else if(type === 'tarea') {
+    if(parent.type === 'proyecto') {
+      const projSel = document.getElementById('m-parent-proj');
+      if(projSel) { projSel.value = parentId; updateActDropdown(); }
+    } else if(parent.type === 'actividad') {
+      const proj = findParentOfNode(parentId);
+      const projSel = document.getElementById('m-parent-proj');
+      if(projSel && proj) {
+        projSel.value = proj.id;
+        updateActDropdown();
+        const actSel = document.getElementById('m-parent-act');
+        if(actSel) actSel.value = parentId;
+      }
+    }
+  }
+};
+
 // ── MENÚ CREAR ────────────────────────────────────────────────────────
 window.toggleCreateMenu = function(e) {
   e.stopPropagation();
