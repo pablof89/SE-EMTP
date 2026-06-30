@@ -108,6 +108,8 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:0
 /* ── TOOLBAR ─────────────────────────────────────────── */
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .toolbar-right{margin-left:auto;display:flex;gap:6px}
+.create-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 14px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;text-align:left}
+.create-menu-item:hover{background:var(--surface2)}
 
 /* ── PANELS ─────────────────────────────────────────── */
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)}
@@ -376,10 +378,13 @@ tr[draggable="true"]:active{cursor:grabbing}
         <option value="">Todos los equipos</option>
       </select>
     </div>
-    <div class="toolbar-right" id="addBtns">
-      <button class="btn" onclick="openAddModal('proyecto')"><i class="fas fa-plus"></i> Proyecto</button>
-      <button class="btn" onclick="openAddModal('actividad')"><i class="fas fa-plus"></i> Actividad</button>
-      <button class="btn btn-primary" onclick="openAddModal('tarea')"><i class="fas fa-plus"></i> Tarea</button>
+    <div class="toolbar-right" id="addBtns" style="position:relative">
+      <button class="btn btn-primary" onclick="toggleCreateMenu(event)" id="btnCrear"><i class="fas fa-plus"></i> Crear <i class="fas fa-chevron-down" style="font-size:10px;margin-left:2px"></i></button>
+      <div id="createMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;min-width:140px;padding:4px 0">
+        <button class="create-menu-item" onclick="closeCreateMenu();openAddModal('proyecto')"><i class="fas fa-folder" style="color:var(--proj);width:16px"></i> Proyecto</button>
+        <button class="create-menu-item" onclick="closeCreateMenu();openAddModal('actividad')"><i class="fas fa-layer-group" style="color:var(--act);width:16px"></i> Actividad</button>
+        <button class="create-menu-item" onclick="closeCreateMenu();openAddModal('tarea')"><i class="fas fa-check-square" style="color:var(--task);width:16px"></i> Tarea</button>
+      </div>
     </div>
   </div>
 
@@ -1735,6 +1740,20 @@ window.deleteRepoFile = function(nodeId, fileUrl) {
 };
 
 // ── MODALES DE AGREGAR/EDITAR NODOS ───────────────────────────────────
+// ── MENÚ CREAR ────────────────────────────────────────────────────────
+window.toggleCreateMenu = function(e) {
+  e.stopPropagation();
+  const m = document.getElementById('createMenu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+};
+window.closeCreateMenu = function() {
+  const m = document.getElementById('createMenu');
+  if(m) m.style.display = 'none';
+};
+document.addEventListener('click', function(e) {
+  if(!e.target.closest('#addBtns')) closeCreateMenu();
+});
+
 window._mTeam = { responsibles:[], support:[], hoursPerPerson:{} };
 function initRespWidget(respList, suppList, hpp) {
   window._mTeam.responsibles=[...(respList||[])];
@@ -1777,7 +1796,7 @@ function openAddModal(type) {
   if(!canEdit) return showToast('Sin permisos para agregar elementos', 'error');
   initRespWidget([],[]);
   let parentHtml='';
-  const projs = data.filter(n=>n.type==='proyecto');
+  const projs = data.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
   if(type==='actividad') {
     parentHtml=`<div class="form-row"><label>Proyecto</label><select id="m-parent-proj"><option value="">(Suelto)</option>${projs.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`;
   } else if(type==='tarea') {
@@ -1802,8 +1821,9 @@ window.updateActDropdown = function() {
   const actSel=document.getElementById('m-parent-act');
   if(!pid){ actSel.innerHTML='<option value="">Seleccione proyecto...</option>'; return; }
   const p=findNode(pid);
-  actSel.innerHTML=(p&&p.children&&p.children.filter(n=>n.type==='actividad').length) ?
-    p.children.filter(n=>n.type==='actividad').map(a=>`<option value="${a.id}">${a.name}</option>`).join('') :
+  const acts=(p&&p.children||[]).filter(n=>n.type==='actividad').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+  actSel.innerHTML=acts.length ?
+    acts.map(a=>`<option value="${a.id}">${a.name}</option>`).join('') :
     '<option value="">(Sin actividades)</option>';
 };
 
