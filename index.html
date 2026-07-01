@@ -219,6 +219,11 @@ tr:hover .row-add-btns{opacity:1}
 .kanban-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);border-color:var(--border2)}
 .kanban-card.dragging{opacity:.45;transform:rotate(1.5deg) scale(.98)}
 .kanban-card-title{font-size:13px;font-weight:600;margin-bottom:7px;line-height:1.35;color:var(--text)}
+.kanban-card-title.completed{text-decoration:line-through;opacity:.5}
+@keyframes blink-danger{0%,100%{opacity:1}50%{opacity:.35}}
+.date-overdue{animation:blink-danger 1.6s ease-in-out infinite;background:var(--danger-bg);color:var(--danger);border-radius:4px;padding:1px 6px;font-weight:600}
+.date-today{background:var(--warn-bg);color:var(--warn);border-radius:4px;padding:1px 6px;font-weight:600}
+.wip-over{background:var(--danger-bg)!important;color:var(--danger)!important;border-radius:6px;padding:1px 7px}
 .kanban-card-meta{font-size:11px;color:var(--text3);display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 
 /* ── REPORTS ─────────────────────────────────────────── */
@@ -380,6 +385,9 @@ tr:hover .row-add-btns{opacity:1}
       </select>
       <select class="filter-select" id="filterTeam" onchange="renderAll()">
         <option value="">Todos los equipos</option>
+      </select>
+      <select class="filter-select" id="filterProj" style="display:none" onchange="tablaProjectFilter=this.value;renderTabla()">
+        <option value="">Todos los proyectos</option>
       </select>
     </div>
     <div class="toolbar-right" id="addBtns" style="position:relative">
@@ -914,6 +922,7 @@ function switchView(view, btn) {
   // Ocultar filtros en vistas que no los necesitan
   const showFilters = ['tabla','gantt','kanban'].includes(view);
   document.getElementById('filterBar').style.display = showFilters ? 'flex' : 'none';
+  document.getElementById('filterProj').style.display = view === 'tabla' ? '' : 'none';
   document.getElementById('addBtns').style.display = (canEdit && ['tabla','kanban'].includes(view)) ? 'flex' : 'none';
   renderAll();
 }
@@ -1013,10 +1022,13 @@ function renderTabla() {
           ${canEdit?`<span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>`:''}
           ${hasC?`<button class="toggle-btn" onclick="toggleCollapse('${n.id}')"><i class="fas fa-chevron-${isCol?'right':'down'}"></i></button>`:`<span class="no-toggle"></span>`}
           <div style="margin-top:2px">${typeBadge(n.type)}</div>
-          <div class="${canEdit?'editable ':''} name-editable" ${canEdit?`contenteditable="true" onblur="updateField('${n.id}','name',this.innerText.trim())"`:''}>${n.name}</div>
+          <div class="${canEdit?'editable ':''} name-editable" style="${n.status==='Completado'?'text-decoration:line-through;color:var(--text3)':''}" ${canEdit?`contenteditable="true" onblur="updateField('${n.id}','name',this.innerText.trim())"`:''}>${n.name}</div>
           ${ab}
-          ${canEdit&&n.type!=='tarea'?`<span class="row-add-btns">${n.type==='proyecto'?`<button class="row-add-btn" onclick="event.stopPropagation();openAddModalUnder('actividad','${n.id}')" title="Nueva actividad"><i class="fas fa-plus"></i> Act</button>`:''}
-            <button class="row-add-btn" onclick="event.stopPropagation();openAddModalUnder('tarea','${n.id}')" title="Nueva tarea"><i class="fas fa-plus"></i> Tar</button></span>`:''}
+          <span class="row-add-btns">
+            ${canEdit&&n.type!=='tarea'?`${n.type==='proyecto'?`<button class="row-add-btn" onclick="event.stopPropagation();openAddModalUnder('actividad','${n.id}')" title="Nueva actividad"><i class="fas fa-plus"></i> Act</button>`:''}
+            <button class="row-add-btn" onclick="event.stopPropagation();openAddModalUnder('tarea','${n.id}')" title="Nueva tarea"><i class="fas fa-plus"></i> Tar</button>`:''}
+            ${canEdit&&n.type==='tarea'?`<button class="row-add-btn" onclick="event.stopPropagation();openLogModal('${n.id}')" title="Reportar avance"><i class="fas fa-clipboard-check"></i> Avance</button>`:''}
+          </span>
         </div></td>
         <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.start)}</span>`:`<input type="date" class="editable" value="${n.start||''}" onchange="updateField('${n.id}','start',this.value)" ${!canEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
         <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.end)}</span>`:`<input type="date" class="editable" value="${n.end||''}" onchange="updateField('${n.id}','end',this.value)" ${!canEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
@@ -1033,7 +1045,16 @@ function renderTabla() {
       if(hasC && !isCol) renderNodes(n.children, level+1);
     }
   }
-  renderNodes(getVisibleData(), 0);
+  // Poblar y aplicar filtro de proyectos
+  const vd = getVisibleData();
+  const projSel = document.getElementById('filterProj');
+  if(projSel) {
+    const projs = vd.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+    projSel.innerHTML = `<option value="">Todos los proyectos</option>` +
+      projs.map(p=>`<option value="${p.id}"${tablaProjectFilter===p.id?' selected':''}>${p.name}</option>`).join('');
+  }
+  const tablaData = tablaProjectFilter ? vd.filter(n=>n.id===tablaProjectFilter) : vd;
+  renderNodes(tablaData, 0);
   document.getElementById('viewTabla').innerHTML=`<div style="overflow-x:auto"><table class="tree-table">
     <thead><tr><th style="min-width:320px">Nombre</th><th>Inicio</th><th>Término</th><th>Horas</th><th style="min-width:140px">Personas</th><th>Estado</th><th>Avance</th><th>Dependencias</th><th><i class="fas fa-paperclip"></i></th><th></th></tr></thead>
     <tbody>${rows||`<tr><td colspan="10"><div class="empty"><i class="fas fa-inbox" style="font-size:24px;margin-bottom:8px;display:block"></i>Sin resultados.</div></td></tr>`}</tbody>
@@ -1067,8 +1088,9 @@ function handleDrop(e,targetId) {
 
 // ── GANTT: escala y scroll ────────────────────────────────────────────
 let ganttScale = 'mes'; // 'dia' | 'semana' | 'mes'
-let ganttProjectFilter = ''; // '' = todos; id del proyecto = solo ese proyecto y sus hijos
-let reportesProjectFilter = ''; // '' = todos; id del proyecto = solo ese proyecto
+let ganttProjectFilter = '';
+let reportesProjectFilter = '';
+let tablaProjectFilter = '';
 function setGanttScale(s) { ganttScale = s; renderGantt(); }
 
 function renderGantt() {
@@ -1250,22 +1272,30 @@ function renderKanban() {
 
   const cols = statuses.map(status => {
     const cards = filtered.filter(n => n.status === status);
+    const WIP_LIMIT = 3;
+    const wipOver = status === 'En curso' && cards.length > WIP_LIMIT;
     const cardsHTML = cards.map(n => {
       const cd = computedDates(n);
       const ov = isOverdue(n);
+      const isToday = cd.end && cd.end === today();
       const project = (() => { let p=findParentOfNode(n.id); while(p){ if(p.type==='proyecto') return p.name; p=findParentOfNode(p.id); } return null; })();
       const resp = (n.responsibles||[]).slice(0,3).map(r=>`<div style="display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0" title="${r}">${r.charAt(0).toUpperCase()}</div>`).join('');
+      const dateBadge = cd.end ? `<span class="${ov?'date-overdue':isToday?'date-today':''}" style="${!ov&&!isToday?'color:var(--text3)':''};font-size:11px"><i class="fas fa-calendar-alt"></i> ${formatDate(cd.end)}</span>` : '';
+      const logCount = (n.log||[]).length;
       return `<div class="kanban-card" data-id="${n.id}"
           draggable="true"
           ondragstart="kanbanDragStart(event,'${n.id}')"
           ondragend="kanbanDragEnd(event)"
           onclick="if(!window._kanbanDragged) openEditModal('${n.id}')">
-        <div class="kanban-card-title">${n.name}${ov?'<span class="alert-badge" style="margin-left:5px">Vencida</span>':''}</div>
+        <div class="kanban-card-title${n.status==='Completado'?' completed':''}">${n.name}${ov?'<span class="alert-badge" style="margin-left:5px">Vencida</span>':''}</div>
         <div class="kanban-card-meta">
           ${project?`<span class="repo-file-proj">${project.slice(0,22)}</span>`:''}
-          ${cd.end?`<span style="color:${ov?'var(--danger)':'var(--text3)'};font-size:11px"><i class="fas fa-calendar-alt"></i>${formatDate(cd.end)}</span>`:''}
+          ${dateBadge}
           ${resp?`<div style="display:flex;gap:2px;margin-left:auto">${resp}</div>`:''}
         </div>
+        ${canEdit?`<div style="margin-top:7px;display:flex;justify-content:space-between;align-items:center">
+          <button class="row-add-btn" style="font-size:10px" onclick="event.stopPropagation();openLogModal('${n.id}')"><i class="fas fa-clipboard-check"></i> Avance${logCount?` (${logCount})`:''}</button>
+        </div>`:''}
       </div>`;
     }).join('');
 
@@ -1276,7 +1306,9 @@ function renderKanban() {
         ondrop="kanbanColDrop(event,'${status}')">
       <div class="kanban-col-header" style="border-top:3px solid var(${statusColors[status]})">
         <span style="color:var(${statusColors[status]});font-weight:700">${status}</span>
-        <span class="kanban-col-count" style="color:var(${statusColors[status]})">${cards.length}</span>
+        <span class="kanban-col-count ${wipOver?'wip-over':''}" style="color:var(${statusColors[status]})" title="${wipOver?`¡WIP limit (${WIP_LIMIT}) superado!`:''}">
+          ${wipOver?'<i class="fas fa-exclamation-triangle" style="font-size:10px;margin-right:3px"></i>':''}${cards.length}
+        </span>
       </div>
       <div class="kanban-col-body" id="kbody-${status.replace(' ','_')}">
         ${cardsHTML || '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px;border:2px dashed var(--border);border-radius:var(--radius)">Sin tareas</div>'}
@@ -1746,6 +1778,35 @@ window.deleteRepoFile = function(nodeId, fileUrl) {
 };
 
 // ── MODALES DE AGREGAR/EDITAR NODOS ───────────────────────────────────
+// ── LOG DE AVANCE ────────────────────────────────────────────────────
+window.openLogModal = function(id) {
+  const n = findNode(id); if(!n) return;
+  const entries = (n.log||[]).slice().reverse();
+  const logHtml = entries.length ? entries.map(e=>`
+    <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px"><i class="fas fa-user" style="margin-right:3px"></i>${e.user} · ${e.date}</div>
+      <div style="font-size:13px;color:var(--text)">${e.text.replace(/</g,'&lt;')}</div>
+    </div>`).join('')
+    : `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0">Sin registros aún.</p>`;
+  showModal(`<h3><i class="fas fa-clipboard-list"></i> Log de Avance: <span style="font-size:14px;font-weight:400;color:var(--text2)">${n.name}</span></h3>
+    <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;margin-bottom:14px">${logHtml}</div>
+    <div class="form-row"><label>¿Qué lograste hoy en esta tarea?</label>
+      <textarea id="logText" rows="3" placeholder="Ej: Terminé la sección de análisis y revisé con el equipo..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveLog('${id}')"><i class="fas fa-save"></i> Guardar</button>
+    </div>`);
+};
+window.saveLog = function(id) {
+  const n = findNode(id); if(!n) return;
+  const text = (document.getElementById('logText').value||'').trim();
+  if(!text) return showToast('Escribe algo antes de guardar','warn');
+  if(!n.log) n.log = [];
+  n.log.push({ date: today(), user: currentUser, text });
+  saveData(); showToast('Avance registrado','success'); closeModal();
+};
+
 // ── CREAR HIJO DESDE FILA ────────────────────────────────────────────
 window.openAddModalUnder = function(type, parentId) {
   openAddModal(type);
