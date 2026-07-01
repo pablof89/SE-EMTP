@@ -392,11 +392,14 @@ tr:hover .row-add-btns{opacity:1}
           <span id="filterProjLabel">Todos los proyectos</span>
           <i class="fas fa-chevron-down" style="font-size:9px;margin-left:2px"></i>
         </button>
-        <div id="filterProjDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:240px;max-height:280px;overflow-y:auto;padding:6px 0">
-          <label style="display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)">
+        <div id="filterProjDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:260px;max-height:320px;display:none;flex-direction:column">
+          <div style="padding:8px 10px;border-bottom:1px solid var(--border)">
+            <input id="filterProjSearch" type="text" placeholder="Buscar proyecto…" oninput="filterProjSearchFn(this.value)" onclick="event.stopPropagation()" style="width:100%;box-sizing:border-box;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text1);outline:none">
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);flex-shrink:0">
             <input type="checkbox" id="filterProjAll" onchange="toggleAllProjects(this.checked)"> Todos los proyectos
           </label>
-          <div id="filterProjList"></div>
+          <div id="filterProjList" style="overflow-y:auto;max-height:200px"></div>
         </div>
       </div>
     </div>
@@ -933,7 +936,7 @@ function switchView(view, btn) {
   const showFilters = ['tabla','gantt','kanban'].includes(view);
   document.getElementById('filterBar').style.display = showFilters ? 'flex' : 'none';
   document.getElementById('filterProjWrap').style.display = view === 'tabla' ? '' : 'none';
-  if(view !== 'tabla') document.getElementById('filterProjDropdown').style.display = 'none';
+  if(view !== 'tabla') { const dd=document.getElementById('filterProjDropdown'); if(dd) dd.style.display='none'; }
   document.getElementById('addBtns').style.display = (canEdit && ['tabla','kanban'].includes(view)) ? 'flex' : 'none';
   renderAll();
 }
@@ -1903,7 +1906,19 @@ window.openAddModalUnder = function(type, parentId) {
 window.toggleProjFilter = function(e) {
   e.stopPropagation();
   const dd = document.getElementById('filterProjDropdown');
-  dd.style.display = dd.style.display === 'none' ? '' : 'none';
+  const opening = dd.style.display === 'none';
+  dd.style.display = opening ? 'flex' : 'none';
+  if(opening) {
+    const inp = document.getElementById('filterProjSearch');
+    if(inp) { inp.value = ''; filterProjSearchFn(''); inp.focus(); }
+  }
+};
+window.filterProjSearchFn = function(q) {
+  const term = q.trim().toLowerCase();
+  document.querySelectorAll('#filterProjList label').forEach(lbl => {
+    const name = lbl.textContent.trim().toLowerCase();
+    lbl.style.display = (!term || name.includes(term)) ? '' : 'none';
+  });
 };
 window.toggleProjSelection = function(cb) {
   const id = cb.value;
@@ -1935,7 +1950,7 @@ function updateProjFilterLabel() {
 document.addEventListener('click', function(e) {
   const wrap = document.getElementById('filterProjWrap');
   const dd = document.getElementById('filterProjDropdown');
-  if(dd && wrap && !wrap.contains(e.target)) dd.style.display = 'none';
+  if(dd && wrap && !wrap.contains(e.target)) { dd.style.display = 'none'; }
 });
 
 // ── MENÚ CREAR ────────────────────────────────────────────────────────
