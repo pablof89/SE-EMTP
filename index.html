@@ -917,6 +917,9 @@ function renderTeamFilter() {
 function renderAll() {
   renderSummary(); renderTeamFilter();
   const v = document.querySelector('.tab.active')?.dataset.view || 'tabla';
+  // Sincronizar visibilidad del filtro de proyectos según vista activa
+  const wrap = document.getElementById('filterProjWrap');
+  if(wrap) wrap.style.display = v === 'tabla' ? '' : 'none';
   if(v==='tabla') renderTabla();
   else if(v==='gantt') renderGantt();
   else if(v==='kanban') renderKanban();
@@ -1849,17 +1852,37 @@ window.openPersonaModal = function(name) {
 
 // ── MODALES DE AGREGAR/EDITAR NODOS ───────────────────────────────────
 // ── LOG DE AVANCE ────────────────────────────────────────────────────
+function renderLogEntries(nodeId) {
+  const n = findNode(nodeId); if(!n) return '';
+  const entries = (n.log||[]).slice().reverse();
+  if(!entries.length) return `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0">Sin registros aún.</p>`;
+  return entries.map((e, ri)=>{
+    const i = (n.log.length - 1) - ri; // índice real en el array original
+    const canEdit = isAdmin || e.user === currentUser;
+    const safeText = e.text.replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    return `
+    <div id="logEntry_${nodeId}_${i}" style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <span style="font-size:10px;color:var(--text3);flex:1"><i class="fas fa-user" style="margin-right:3px"></i>${e.user} · ${e.date}</span>
+        ${canEdit?`
+        <button onclick="startEditLog('${nodeId}',${i})" title="Editar" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px"><i class="fas fa-pencil-alt"></i></button>
+        <button onclick="confirmDeleteLog('${nodeId}',${i})" title="Eliminar" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:11px;padding:2px 4px"><i class="fas fa-trash"></i></button>`:''}
+      </div>
+      <div id="logText_${nodeId}_${i}" style="font-size:13px;color:var(--text)">${e.text.replace(/</g,'&lt;')}</div>
+      <div id="logEdit_${nodeId}_${i}" style="display:none;margin-top:6px">
+        <textarea id="logEditArea_${nodeId}_${i}" rows="3" style="width:100%;box-sizing:border-box;font-size:13px">${safeText}</textarea>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px">
+          <button class="btn btn-ghost btn-sm" onclick="cancelEditLog('${nodeId}',${i})">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="saveEditLog('${nodeId}',${i})"><i class="fas fa-save"></i> Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
 window.openLogModal = function(id) {
   const n = findNode(id); if(!n) return;
-  const entries = (n.log||[]).slice().reverse();
-  const logHtml = entries.length ? entries.map(e=>`
-    <div style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:10px;color:var(--text3);margin-bottom:3px"><i class="fas fa-user" style="margin-right:3px"></i>${e.user} · ${e.date}</div>
-      <div style="font-size:13px;color:var(--text)">${e.text.replace(/</g,'&lt;')}</div>
-    </div>`).join('')
-    : `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0">Sin registros aún.</p>`;
   showModal(`<h3><i class="fas fa-clipboard-list"></i> Log de Avance: <span style="font-size:14px;font-weight:400;color:var(--text2)">${n.name}</span></h3>
-    <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;margin-bottom:14px">${logHtml}</div>
+    <div id="logEntriesWrap" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;margin-bottom:14px">${renderLogEntries(id)}</div>
     <div class="form-row"><label>¿Qué lograste hoy en esta tarea?</label>
       <textarea id="logText" rows="3" placeholder="Ej: Terminé la sección de análisis y revisé con el equipo..."></textarea>
     </div>
@@ -1875,6 +1898,46 @@ window.saveLog = function(id) {
   if(!n.log) n.log = [];
   n.log.push({ date: today(), user: currentUser, text });
   saveData(); showToast('Avance registrado','success'); closeModal();
+};
+window.startEditLog = function(nodeId, i) {
+  document.getElementById(`logText_${nodeId}_${i}`).style.display = 'none';
+  document.getElementById(`logEdit_${nodeId}_${i}`).style.display = '';
+  document.getElementById(`logEditArea_${nodeId}_${i}`).focus();
+};
+window.cancelEditLog = function(nodeId, i) {
+  document.getElementById(`logText_${nodeId}_${i}`).style.display = '';
+  document.getElementById(`logEdit_${nodeId}_${i}`).style.display = 'none';
+};
+window.saveEditLog = function(nodeId, i) {
+  const n = findNode(nodeId); if(!n||!n.log) return;
+  const text = (document.getElementById(`logEditArea_${nodeId}_${i}`).value||'').trim();
+  if(!text) return showToast('El texto no puede estar vacío','warn');
+  n.log[i].text = text;
+  saveData();
+  document.getElementById('logEntriesWrap').innerHTML = renderLogEntries(nodeId);
+  showToast('Nota actualizada','success');
+};
+window.confirmDeleteLog = function(nodeId, i) {
+  const n = findNode(nodeId); if(!n||!n.log) return;
+  const entry = n.log[i];
+  showModal(`
+    <h3 style="color:var(--danger)"><i class="fas fa-exclamation-triangle"></i> Eliminar nota</h3>
+    <p style="margin:12px 0">¿Estás seguro de que deseas eliminar esta anotación?</p>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--text2)">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:4px"><i class="fas fa-user" style="margin-right:3px"></i>${entry.user} · ${entry.date}</div>
+      ${entry.text.replace(/</g,'&lt;')}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="openLogModal('${nodeId}')">Cancelar</button>
+      <button class="btn btn-danger" onclick="deleteLog('${nodeId}',${i})"><i class="fas fa-trash"></i> Eliminar</button>
+    </div>`);
+};
+window.deleteLog = function(nodeId, i) {
+  const n = findNode(nodeId); if(!n||!n.log) return;
+  n.log.splice(i, 1);
+  saveData();
+  showToast('Nota eliminada','success');
+  openLogModal(nodeId);
 };
 
 // ── CREAR HIJO DESDE FILA ────────────────────────────────────────────
