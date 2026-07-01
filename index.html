@@ -394,7 +394,7 @@ tr:hover .row-add-btns{opacity:1}
         </button>
         <div id="filterProjDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:240px;max-height:280px;overflow-y:auto;padding:6px 0">
           <label style="display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)">
-            <input type="checkbox" id="filterProjAll" checked onchange="toggleAllProjects(this.checked)"> Todos los proyectos
+            <input type="checkbox" id="filterProjAll" onchange="toggleAllProjects(this.checked)"> Todos los proyectos
           </label>
           <div id="filterProjList"></div>
         </div>
@@ -1063,12 +1063,14 @@ function renderTabla() {
   if(projList) {
     projList.innerHTML = projs.map(p=>`
       <label style="display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:13px">
-        <input type="checkbox" value="${p.id}" ${tablaProjectFilter.size===0||tablaProjectFilter.has(p.id)?'checked':''} onchange="toggleProjSelection(this)">
+        <input type="checkbox" value="${p.id}" ${tablaFilterAll||tablaProjectFilter.has(p.id)?'checked':''} onchange="toggleProjSelection(this)">
         ${p.name}
       </label>`).join('');
   }
   updateProjFilterLabel();
-  const tablaData = tablaProjectFilter.size===0 ? vd : vd.filter(n=>n.id && tablaProjectFilter.has(n.id));
+  const allCb = document.getElementById('filterProjAll');
+  if(allCb) allCb.checked = tablaFilterAll;
+  const tablaData = tablaFilterAll ? vd : (tablaProjectFilter.size===0 ? [] : vd.filter(n=>n.id && tablaProjectFilter.has(n.id)));
   renderNodes(tablaData, 0);
   document.getElementById('viewTabla').innerHTML=`<div style="overflow-x:auto"><table class="tree-table">
     <thead><tr><th style="min-width:320px">Nombre</th><th>Inicio</th><th>Término</th><th>Horas</th><th style="min-width:140px">Personas</th><th>Estado</th><th>Avance</th><th>Dependencias</th><th><i class="fas fa-paperclip"></i></th><th></th></tr></thead>
@@ -1105,7 +1107,8 @@ function handleDrop(e,targetId) {
 let ganttScale = 'mes'; // 'dia' | 'semana' | 'mes'
 let ganttProjectFilter = '';
 let reportesProjectFilter = '';
-let tablaProjectFilter = new Set(); // IDs seleccionados; vacío = todos
+let tablaProjectFilter = new Set(); // IDs seleccionados; vacío + tablaFilterAll=true = todos
+let tablaFilterAll = true;
 function setGanttScale(s) { ganttScale = s; renderGantt(); }
 
 function renderGantt() {
@@ -1906,16 +1909,16 @@ window.toggleProjSelection = function(cb) {
   const id = cb.value;
   const vd = getVisibleData();
   const projIds = vd.filter(n=>n.type==='proyecto').map(n=>n.id);
-  // Si el Set estaba vacío (= todos), expandirlo primero con todos los IDs
-  if(tablaProjectFilter.size === 0) tablaProjectFilter = new Set(projIds);
+  // Si estaba en modo "todos", expandir el Set con todos los IDs antes de modificar
+  if(tablaFilterAll) { tablaProjectFilter = new Set(projIds); tablaFilterAll = false; }
   if(cb.checked) tablaProjectFilter.add(id); else tablaProjectFilter.delete(id);
-  // Si todos quedan marcados o ninguno, normalizar a "todos"
-  if(tablaProjectFilter.size === 0 || tablaProjectFilter.size === projIds.length)
-    tablaProjectFilter = new Set();
-  document.getElementById('filterProjAll').checked = tablaProjectFilter.size === 0;
+  // Si quedan todos marcados, volver al modo "todos"
+  if(tablaProjectFilter.size === projIds.length) { tablaProjectFilter = new Set(); tablaFilterAll = true; }
+  document.getElementById('filterProjAll').checked = tablaFilterAll;
   renderTabla();
 };
 window.toggleAllProjects = function(checked) {
+  tablaFilterAll = checked;
   tablaProjectFilter = new Set();
   document.querySelectorAll('#filterProjList input[type=checkbox]').forEach(c=>c.checked=checked);
   renderTabla();
@@ -1923,7 +1926,8 @@ window.toggleAllProjects = function(checked) {
 function updateProjFilterLabel() {
   const lbl = document.getElementById('filterProjLabel');
   if(!lbl) return;
-  if(tablaProjectFilter.size === 0) { lbl.textContent = 'Todos los proyectos'; return; }
+  if(tablaFilterAll) { lbl.textContent = 'Todos los proyectos'; return; }
+  if(tablaProjectFilter.size === 0) { lbl.textContent = 'Sin proyectos'; return; }
   const vd = getVisibleData();
   const names = [...tablaProjectFilter].map(id=>{ const n=vd.find(x=>x.id===id); return n?n.name:id; });
   lbl.textContent = names.length === 1 ? names[0] : `${names.length} proyectos`;
