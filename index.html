@@ -1399,7 +1399,7 @@ function renderEquipo() {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--accent-bg),var(--proj-bg));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0">${initials}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:15px">${resp}</div>
+          <div style="font-weight:600;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;gap:5px" onclick="openPersonaModal('${safeResp}')" title="Ver participación">${resp}<i class="fas fa-list-ul" style="font-size:10px;color:var(--text3);opacity:.7"></i></div>
           ${user&&user.email?`<div style="font-size:11px;color:var(--accent)"><i class="fas fa-envelope"></i> ${user.email}</div>`:''}
           ${team?`<span class="team-badge"><i class="fas fa-users"></i> ${team}</span>`:''}
         </div>
@@ -1775,6 +1775,55 @@ window.deleteRepoFile = function(nodeId, fileUrl) {
     showToast('Archivo eliminado', 'success');
     renderArchivos();
   }
+};
+
+// ── MODAL PARTICIPACIÓN POR PERSONA ──────────────────────────────────
+window.openPersonaModal = function(name) {
+  const projects = data.filter(n=>n.type==='proyecto');
+
+  function roleChip(n) {
+    if((n.responsibles||[]).includes(name))
+      return `<span style="font-size:10px;background:var(--accent-bg);color:var(--accent);border-radius:4px;padding:1px 6px;white-space:nowrap">Responsable</span>`;
+    if((n.support||[]).includes(name))
+      return `<span style="font-size:10px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;white-space:nowrap">Apoyo</span>`;
+    return '';
+  }
+
+  function statusColor(s) {
+    return {Completado:'var(--success)','En curso':'var(--accent)',Pendiente:'var(--warn)',Bloqueado:'var(--danger)'}[s]||'var(--text3)';
+  }
+
+  const sections = projects.map(proj => {
+    const children = getAllNodes([proj]).filter(c=>c.id!==proj.id);
+    const participating = children.filter(c=>(c.responsibles||[]).includes(name)||(c.support||[]).includes(name));
+    if(!participating.length) return '';
+
+    const rows = participating.map(n=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid var(--border)">
+        ${typeBadge(n.type)}
+        <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${n.name}">${n.name}</span>
+        ${roleChip(n)}
+        <span style="font-size:11px;color:${statusColor(n.status)};font-weight:500;white-space:nowrap">${n.status||''}</span>
+      </div>`).join('');
+
+    return `<details open style="margin-bottom:6px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+      <summary style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--proj-bg);cursor:pointer;font-weight:600;list-style:none;user-select:none">
+        <i class="fas fa-folder" style="color:var(--proj)"></i>
+        <span style="flex:1">${proj.name}</span>
+        <span style="font-size:11px;font-weight:400;color:var(--text3)">${participating.length} elemento${participating.length!==1?'s':''}</span>
+        <i class="fas fa-chevron-down" style="font-size:10px;color:var(--text3)"></i>
+      </summary>
+      ${rows}
+    </details>`;
+  }).filter(Boolean).join('');
+
+  showModal(`
+    <h3 style="margin-bottom:14px"><i class="fas fa-user-circle" style="margin-right:6px;color:var(--accent)"></i>Participación: <span style="color:var(--accent)">${name}</span></h3>
+    <div style="max-height:440px;overflow-y:auto">
+      ${sections||`<p style="color:var(--text3);text-align:center;padding:28px 0">No participa en ningún proyecto.</p>`}
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
+  `);
 };
 
 // ── MODALES DE AGREGAR/EDITAR NODOS ───────────────────────────────────
