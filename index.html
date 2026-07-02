@@ -1047,11 +1047,12 @@ function switchView(view, btn) {
   renderAll();
 }
 
-// Valida que end no sea anterior a start. Si lo es, devuelve el día siguiente
-// al start como end corregido y retorna true en 'fixed'.
+// Valida que end sea al menos el día siguiente a start. Si no lo es
+// (fin anterior o igual a inicio), devuelve start+1 día como end corregido
+// y retorna true en 'fixed'.
 function validateDates(start, end) {
   if(!start || !end) return { start, end, fixed:false };
-  if(end >= start) return { start, end, fixed:false };
+  if(end > start) return { start, end, fixed:false };
   const d = new Date(start); d.setDate(d.getDate()+1);
   const corrected = d.toISOString().slice(0,10);
   return { start, end:corrected, fixed:true };
