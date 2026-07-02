@@ -386,6 +386,9 @@ tr:hover .row-add-btns{opacity:1}
       <select class="filter-select" id="filterTeam" onchange="renderAll()">
         <option value="">Todos los equipos</option>
       </select>
+      <select class="filter-select" id="filterPerson" style="display:none" onchange="renderTabla()">
+        <option value="">Todas las personas</option>
+      </select>
       <div id="filterProjWrap" style="display:none;position:relative">
         <button id="filterProjBtn" class="filter-select" style="cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap" onclick="toggleProjFilter(event)">
           <i class="fas fa-filter" style="font-size:10px"></i>
@@ -917,9 +920,11 @@ function renderTeamFilter() {
 function renderAll() {
   renderSummary(); renderTeamFilter();
   const v = document.querySelector('.tab.active')?.dataset.view || 'tabla';
-  // Sincronizar visibilidad del filtro de proyectos según vista activa
+  // Sincronizar visibilidad de filtros exclusivos de Tabla
   const wrap = document.getElementById('filterProjWrap');
   if(wrap) wrap.style.display = v === 'tabla' ? '' : 'none';
+  const personSel = document.getElementById('filterPerson');
+  if(personSel) personSel.style.display = v === 'tabla' ? '' : 'none';
   if(v==='tabla') renderTabla();
   else if(v==='gantt') renderGantt();
   else if(v==='kanban') renderKanban();
@@ -939,6 +944,7 @@ function switchView(view, btn) {
   const showFilters = ['tabla','gantt','kanban'].includes(view);
   document.getElementById('filterBar').style.display = showFilters ? 'flex' : 'none';
   document.getElementById('filterProjWrap').style.display = view === 'tabla' ? '' : 'none';
+  document.getElementById('filterPerson').style.display = view === 'tabla' ? '' : 'none';
   if(view !== 'tabla') { const dd=document.getElementById('filterProjDropdown'); if(dd) dd.style.display='none'; }
   document.getElementById('addBtns').style.display = (canEdit && ['tabla','kanban'].includes(view)) ? 'flex' : 'none';
   renderAll();
@@ -1062,9 +1068,22 @@ function renderTabla() {
       if(hasC && !isCol) renderNodes(n.children, level+1);
     }
   }
-  // Poblar y aplicar filtro de proyectos (multi-selección)
+  // Poblar y aplicar filtro de persona
   const vd = getVisibleData();
-  const projs = vd.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+  const personSel = document.getElementById('filterPerson');
+  if(personSel) {
+    const selectedPerson = personSel.value;
+    const allPeople = [...new Set(getAllNodes(vd).flatMap(n=>[...(n.responsibles||[]),...(n.support||[])]))].sort((a,b)=>a.localeCompare(b,'es'));
+    personSel.innerHTML = `<option value="">Todas las personas</option>` +
+      allPeople.map(p=>`<option value="${p}"${selectedPerson===p?' selected':''}>${p}</option>`).join('');
+  }
+  const tablaPersonFilter = personSel?.value || '';
+  // Aplicar filtro de persona: solo proyectos donde esa persona participa en algún nodo
+  const vdFiltered = tablaPersonFilter
+    ? vd.filter(n => n.type==='proyecto' && getAllNodes([n]).some(c=>(c.responsibles||[]).includes(tablaPersonFilter)||(c.support||[]).includes(tablaPersonFilter)))
+    : vd;
+  // Poblar y aplicar filtro de proyectos (multi-selección)
+  const projs = vdFiltered.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
   const projList = document.getElementById('filterProjList');
   if(projList) {
     projList.innerHTML = projs.map(p=>`
@@ -1076,7 +1095,7 @@ function renderTabla() {
   updateProjFilterLabel();
   const allCb = document.getElementById('filterProjAll');
   if(allCb) allCb.checked = tablaFilterAll;
-  const tablaData = tablaFilterAll ? vd : (tablaProjectFilter.size===0 ? [] : vd.filter(n=>n.id && tablaProjectFilter.has(n.id)));
+  const tablaData = tablaFilterAll ? vdFiltered : (tablaProjectFilter.size===0 ? [] : vdFiltered.filter(n=>n.id && tablaProjectFilter.has(n.id)));
   renderNodes(tablaData, 0);
   document.getElementById('viewTabla').innerHTML=`<div style="overflow-x:auto"><table class="tree-table">
     <thead><tr><th style="min-width:320px">Nombre</th><th>Inicio</th><th>Término</th><th>Horas</th><th style="min-width:140px">Personas</th><th>Estado</th><th>Avance</th><th>Dependencias</th><th><i class="fas fa-paperclip"></i></th><th></th></tr></thead>
