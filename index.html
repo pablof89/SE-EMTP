@@ -1248,12 +1248,21 @@ function handleDrop(e,targetId) {
   if(!dragInfo||!targetInfo) return false;
   const draggedNode=dragInfo.array[dragInfo.index];
   const targetNode=targetInfo.array[targetInfo.index];
+
+  // Jerarquía válida: proyecto > actividad/tarea, actividad > tarea.
+  // Un proyecto solo puede reordenarse junto a otros proyectos; una actividad
+  // nunca puede terminar anidada dentro de una tarea.
+  const invalid =
+    (draggedNode.type==='proyecto' && targetNode.type!=='proyecto') ||
+    (draggedNode.type==='actividad' && targetNode.type==='tarea');
+  if(invalid) { showToast('No se puede mover ese elemento a esa ubicación', 'error'); return false; }
+
   dragInfo.array.splice(dragInfo.index,1);
   const updatedTargetInfo=findParentArrayAndIndex(targetId,data);
   if(!updatedTargetInfo) { data.push(draggedNode); }
   else {
     if(draggedNode.type===targetNode.type) { updatedTargetInfo.array.splice(updatedTargetInfo.index,0,draggedNode); }
-    else { if(targetNode.type==='tarea') { updatedTargetInfo.array.splice(updatedTargetInfo.index+1,0,draggedNode); } else { if(!targetNode.children) targetNode.children=[]; targetNode.children.push(draggedNode); collapsed[targetId]=false; } }
+    else { if(!targetNode.children) targetNode.children=[]; targetNode.children.push(draggedNode); collapsed[targetId]=false; }
   }
   saveData(); renderAll(); return false;
 }
