@@ -1186,8 +1186,7 @@ function renderTabla() {
     }
   }
   // Poblar y aplicar filtro de persona
-  // Para admins: datos completos. Para editores/viewers: árbol podado a sus nodos.
-  const vd = getVisibleDataPruned();
+  const vd = getVisibleData();
   const personSel = document.getElementById('filterPerson');
   if(personSel) {
     const selectedPerson = personSel.value;
