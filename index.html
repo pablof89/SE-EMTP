@@ -249,6 +249,10 @@ tr:hover .row-add-btns{opacity:1}
 .pct-bar-wrap{width:58px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
 .pct-bar{height:100%;border-radius:3px;background:var(--success);transition:width .3s}
 .export-note{font-size:11px;color:var(--text3);font-style:italic}
+.online-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--success),#16a34a);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid var(--surface);cursor:default;position:relative;flex-shrink:0}
+.online-avatar::after{content:'';position:absolute;bottom:0;right:0;width:7px;height:7px;background:var(--success);border-radius:50%;border:1.5px solid var(--surface)}
+.online-dot{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;animation:pulse-online 2s ease-in-out infinite}
+@keyframes pulse-online{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}
 .fas,.far,.fab{margin-right:3px}
 .btn i{margin-right:4px}
 .user-list-item{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;border-bottom:1px solid var(--border);background:var(--surface)}
@@ -344,6 +348,7 @@ tr:hover .row-add-btns{opacity:1}
   <div class="spacer"></div>
   <div class="header-actions">
     <span id="lastSaved" class="export-note"></span>
+    <div id="onlineUsers" style="display:none;align-items:center;gap:4px;margin-right:6px" title="Usuarios en línea"></div>
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()"><i class="fas fa-file-csv"></i> CSV</button>
     <button class="btn btn-ghost btn-sm" onclick="exportXLSX()"><i class="fas fa-file-excel"></i> Excel</button>
     <div class="h-divider"></div>
@@ -714,13 +719,53 @@ async function pollForChanges() {
 
 function startPolling() {
   if(_pollTimer) clearInterval(_pollTimer);
-  // Guardar hash inicial para no re-renderizar innecesariamente al arrancar
   _lastDataHash = hashData({ data, users, teams });
   _pollTimer = setInterval(pollForChanges, POLL_INTERVAL);
+  // Heartbeat de presencia cada 20s
+  sendHeartbeat();
+  if(_heartbeatTimer) clearInterval(_heartbeatTimer);
+  _heartbeatTimer = setInterval(sendHeartbeat, 20000);
+}
+
+// ── PRESENCIA / USUARIOS EN LÍNEA ────────────────────────────────────
+let _heartbeatTimer = null;
+
+async function sendHeartbeat() {
+  if(!currentUser || !currentPass) return;
+  try {
+    const res = await fetch(CLOUD_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'heartbeat', user:currentUser, pass:currentPass })
+    });
+    const result = await res.json();
+    if(result.status === 'success' && Array.isArray(result.online)) {
+      renderOnlineUsers(result.online);
+    }
+  } catch(e) { /* silencioso */ }
+}
+
+function renderOnlineUsers(onlineList) {
+  const wrap = document.getElementById('onlineUsers');
+  if(!wrap) return;
+  // Excluir al usuario actual de la lista visible (ya se sabe que está en línea)
+  const others = onlineList.filter(u => u !== currentUser);
+  if(others.length === 0) { wrap.style.display = 'none'; return; }
+  const userObj = u => users[u] || {};
+  const avatars = others.slice(0, 5).map(u => {
+    const name = userObj(u).name || u;
+    const initial = name.charAt(0).toUpperCase();
+    return `<div class="online-avatar" title="${name} (en línea)">${initial}</div>`;
+  }).join('');
+  const extra = others.length > 5 ? `<span style="font-size:11px;color:var(--text3);margin-left:2px">+${others.length-5}</span>` : '';
+  const label = `<span style="font-size:11px;color:var(--text3);white-space:nowrap"><span class="online-dot"></span> ${others.length} en línea</span>`;
+  wrap.style.display = 'flex';
+  wrap.innerHTML = label + avatars + extra;
 }
 
 function logout() {
   if(_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  if(_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+  const wrap = document.getElementById('onlineUsers'); if(wrap) wrap.style.display='none';
   // Al cerrar sesión borramos la sesión guardada: la próxima carga sí pedirá login.
   try { localStorage.removeItem('emtp_session'); } catch(e){}
   currentUser=null; currentPass=null; isAdmin=false; canEdit=false; currentRole='viewer';
