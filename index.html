@@ -774,17 +774,14 @@ async function uploadFileToDrive(id) {
       });
       const result = await res.json();
       if(result.status === 'success') {
-        // Persistimos el archivo en el propio nodo para conservar la asociación al recargar.
         const node = findNode(id);
         if(node){ if(!node.files) node.files=[]; node.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString(), uploadedBy:currentUser }); }
         saveData();
-        // Refresh global file list too
-        await loadFilesFromDrive();
         showToast('Archivo subido correctamente', 'success');
         closeModal(); renderAll();
-      }
-    } catch(err) { showToast('Error al subir el archivo', 'error'); }
-    btn.disabled=false;
+        loadFilesFromDrive(); // refresco en segundo plano
+      } else { showToast('Error al subir: '+(result.message||''), 'error'); btn.innerHTML='<i class="fas fa-cloud-upload-alt"></i> Subir a Drive'; btn.disabled=false; }
+    } catch(err) { showToast('Error de conexión al subir el archivo', 'error'); btn.innerHTML='<i class="fas fa-cloud-upload-alt"></i> Subir a Drive'; btn.disabled=false; }
   };
   reader.readAsDataURL(file);
 }
@@ -1760,7 +1757,7 @@ function renderArchivos() {
         <option value="">Selecciona un proyecto…</option>${projOpts}
       </select>
       <input type="file" id="repoFileInput" style="font-size:12px;flex:1;min-width:200px">
-      <button class="btn btn-primary btn-sm" onclick="uploadRepoFile()"><i class="fas fa-upload"></i> Subir</button>
+      <button id="btnRepoUpload" class="btn btn-primary btn-sm" onclick="uploadRepoFile()"><i class="fas fa-upload"></i> Subir</button>
     </div>` : '';
 
   let html = `<div>
@@ -1806,7 +1803,7 @@ async function uploadRepoFile() {
   const fi = document.getElementById('repoFileInput');
   if(!fi||!fi.files.length) return showToast('Selecciona un archivo', 'error');
   const file = fi.files[0];
-  const btn = fi.nextElementSibling;
+  const btn = document.getElementById('btnRepoUpload');
   btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Subiendo...'; btn.disabled=true;
   const reader = new FileReader();
   reader.onload = async function(e) {
@@ -1818,16 +1815,14 @@ async function uploadRepoFile() {
       });
       const result = await res.json();
       if(result.status==='success') {
-        // Persistimos el archivo dentro del proyecto elegido para conservar la asociación.
         const proj = findNode(projectId);
         if(proj){ if(!proj.files) proj.files=[]; proj.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString(), uploadedBy:currentUser }); }
         saveData();
-        await loadFilesFromDrive();
-        showToast('Archivo subido y asociado al proyecto', 'success');
-        renderArchivos();
-      } else { showToast('Error al subir: '+result.message, 'error'); }
-    } catch(err) { showToast('Error de conexión', 'error'); }
-    btn.innerHTML='<i class="fas fa-upload"></i> Subir'; btn.disabled=false;
+        showToast(`Archivo "${result.name}" subido exitosamente`, 'success');
+        renderArchivos(); // muestra el archivo de inmediato
+        loadFilesFromDrive(); // refresco en segundo plano
+      } else { showToast('Error al subir: '+(result.message||''), 'error'); btn.innerHTML='<i class="fas fa-upload"></i> Subir'; btn.disabled=false; }
+    } catch(err) { showToast('Error de conexión al subir el archivo', 'error'); btn.innerHTML='<i class="fas fa-upload"></i> Subir'; btn.disabled=false; }
   };
   reader.readAsDataURL(file);
 }
