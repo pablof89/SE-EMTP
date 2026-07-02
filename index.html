@@ -1306,11 +1306,35 @@ function renderGantt() {
 // ── VISTA KANBAN CON DRAG & DROP ─────────────────────────────────────
 let kanbanDragId = null;
 
+let kanbanProjFilter = '';
+let kanbanPersonFilter = '';
+
 function renderKanban() {
   const statuses = ['Pendiente','En curso','Completado','Bloqueado'];
   const statusColors = { 'Pendiente':'--warn', 'En curso':'--accent', 'Completado':'--success', 'Bloqueado':'--danger' };
   const f = getFilters();
-  const allNodes = getAllNodes(getVisibleData()).filter(n => n.type === 'tarea');
+  const vd = getVisibleData();
+
+  // Opciones para los selectores
+  const projs = vd.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+  const allPeople = [...new Set(getAllNodes(vd).flatMap(n=>[...(n.responsibles||[]),...(n.support||[])]))].sort((a,b)=>a.localeCompare(b,'es'));
+  const projOpts = `<option value="">Todos los proyectos</option>` + projs.map(p=>`<option value="${p.id}"${kanbanProjFilter===p.id?' selected':''}>${p.name}</option>`).join('');
+  const personOpts = `<option value="">Todas las personas</option>` + allPeople.map(p=>`<option value="${p}"${kanbanPersonFilter===p?' selected':''}>${p}</option>`).join('');
+  const filterBar = `<div style="display:flex;gap:8px;align-items:center;padding:10px 0 14px;flex-wrap:wrap">
+    <select class="filter-select" onchange="kanbanProjFilter=this.value;renderKanban()">${projOpts}</select>
+    <select class="filter-select" onchange="kanbanPersonFilter=this.value;renderKanban()">${personOpts}</select>
+  </div>`;
+
+  // Aplicar filtros kanban
+  let allNodes = getAllNodes(vd).filter(n => n.type === 'tarea');
+  if(kanbanProjFilter) {
+    const projNode = vd.find(n=>n.id===kanbanProjFilter);
+    const projIds = projNode ? new Set(getAllNodes([projNode]).map(n=>n.id)) : new Set();
+    allNodes = allNodes.filter(n => projIds.has(n.id));
+  }
+  if(kanbanPersonFilter) {
+    allNodes = allNodes.filter(n => (n.responsibles||[]).includes(kanbanPersonFilter)||(n.support||[]).includes(kanbanPersonFilter));
+  }
   const filtered = allNodes.filter(n => nodeMatchesFilter(n,f));
 
   const cols = statuses.map(status => {
@@ -1359,7 +1383,7 @@ function renderKanban() {
     </div>`;
   }).join('');
 
-  document.getElementById('viewKanban').innerHTML = `<div class="kanban-board">${cols}</div>`;
+  document.getElementById('viewKanban').innerHTML = filterBar + `<div class="kanban-board">${cols}</div>`;
 }
 
 window._kanbanDragged = false;
