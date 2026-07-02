@@ -1206,6 +1206,13 @@ function renderTabla() {
     : vd;
   // Poblar y aplicar filtro de proyectos (multi-selección)
   const projs = vdFiltered.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+  // Si hay proyectos seleccionados que ya no son visibles para este usuario, resetear el filtro
+  if(!tablaFilterAll && tablaProjectFilter.size > 0) {
+    const visibleIds = new Set(projs.map(p=>p.id));
+    if(![...tablaProjectFilter].some(id=>visibleIds.has(id))) {
+      tablaProjectFilter = new Set(); tablaFilterAll = true;
+    }
+  }
   const projList = document.getElementById('filterProjList');
   if(projList) {
     projList.innerHTML = projs.map(p=>`
