@@ -1107,12 +1107,32 @@ function hasFilteredDescendant(node, f) {
 }
 
 // ── VISTA TABLA ───────────────────────────────────────────────────────
+function userParticipates(n) {
+  return (n.responsibles||[]).includes(currentUser) || (n.support||[]).includes(currentUser);
+}
+
+// Poda el árbol de un proyecto para mostrar solo las ramas donde el usuario participa.
+// Devuelve una copia con children filtrados, o null si no aplica.
+function pruneForUser(n) {
+  const prunedChildren = (n.children||[]).map(pruneForUser).filter(Boolean);
+  if(n.type === 'proyecto') return { ...n, children: prunedChildren };
+  if(userParticipates(n) || prunedChildren.length > 0) return { ...n, children: prunedChildren };
+  return null;
+}
+
 function getVisibleData() {
   if(isAdmin) return data;
-  return data.filter(n => {
-    if(n.type === 'proyecto') return getAllNodes([n]).some(c => (c.responsibles||[]).includes(currentUser) || (c.support||[]).includes(currentUser));
-    return (n.responsibles||[]).includes(currentUser) || (n.support||[]).includes(currentUser);
-  });
+  // Devuelve los proyectos completos donde el usuario participa en algún nodo.
+  // (sin podar — para Kanban, Equipo, etc. se necesita el árbol completo)
+  return data.filter(n =>
+    n.type === 'proyecto' && getAllNodes([n]).some(userParticipates)
+  );
+}
+
+// Versión podada para vista Tabla: solo muestra los nodos donde el usuario participa.
+function getVisibleDataPruned() {
+  if(isAdmin) return data;
+  return getVisibleData().map(pruneForUser).filter(Boolean);
 }
 
 function renderTabla() {
@@ -1166,7 +1186,8 @@ function renderTabla() {
     }
   }
   // Poblar y aplicar filtro de persona
-  const vd = getVisibleData();
+  // Para admins: datos completos. Para editores/viewers: árbol podado a sus nodos.
+  const vd = getVisibleDataPruned();
   const personSel = document.getElementById('filterPerson');
   if(personSel) {
     const selectedPerson = personSel.value;
