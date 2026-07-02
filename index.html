@@ -663,9 +663,64 @@ function iniciarApp() {
   normalizeDatesInTree(data);
   renderAll();
   loadFilesFromDrive();
+  startPolling();
+}
+
+// ── SINCRONIZACIÓN EN TIEMPO REAL (POLLING) ───────────────────────────
+let _pollTimer = null;
+let _lastDataHash = '';
+const POLL_INTERVAL = 30000; // 30 segundos
+
+function hashData(d) {
+  // Hash rápido basado en JSON — detecta cualquier cambio en data/users/teams
+  try { return JSON.stringify(d); } catch(e) { return ''; }
+}
+
+async function pollForChanges() {
+  if(!currentUser || !currentPass) return;
+  // No refrescar mientras el usuario tenga un modal abierto
+  if(document.getElementById('modal')?.style.display !== 'none') return;
+  try {
+    const res = await fetch(CLOUD_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'login', user:currentUser, pass:currentPass })
+    });
+    const result = await res.json();
+    if(result.status !== 'success') return;
+    const incoming = result.payload;
+    const newHash = hashData(incoming);
+    if(newHash === _lastDataHash) return; // sin cambios
+    _lastDataHash = newHash;
+    // Aplicar datos nuevos
+    if(incoming.data)  data  = incoming.data;
+    if(incoming.users) users = incoming.users;
+    if(incoming.teams) teams = incoming.teams;
+    // Normalizar campos que puedan faltar
+    getAllNodes(data).forEach(n => {
+      if(!n.responsibles) n.responsibles=[];
+      if(!n.support) n.support=[];
+      if(!n.deps) n.deps=[];
+      if(!n.notes) n.notes='';
+      if(!n.files) n.files=[];
+      if(!n.children) n.children=[];
+    });
+    normalizeDatesInTree(data);
+    renderAll();
+    // Indicador visual sutil
+    const si = document.getElementById('lastSaved');
+    if(si) { const h=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); si.textContent=`Sincronizado ${h}`; }
+  } catch(e) { /* fallo silencioso, reintenta en el próximo ciclo */ }
+}
+
+function startPolling() {
+  if(_pollTimer) clearInterval(_pollTimer);
+  // Guardar hash inicial para no re-renderizar innecesariamente al arrancar
+  _lastDataHash = hashData({ data, users, teams });
+  _pollTimer = setInterval(pollForChanges, POLL_INTERVAL);
 }
 
 function logout() {
+  if(_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   // Al cerrar sesión borramos la sesión guardada: la próxima carga sí pedirá login.
   try { localStorage.removeItem('emtp_session'); } catch(e){}
   currentUser=null; currentPass=null; isAdmin=false; canEdit=false; currentRole='viewer';
