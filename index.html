@@ -1108,7 +1108,12 @@ function hasFilteredDescendant(node, f) {
 
 // ── VISTA TABLA ───────────────────────────────────────────────────────
 function userParticipates(n) {
-  return (n.responsibles||[]).includes(currentUser) || (n.support||[]).includes(currentUser);
+  // responsibles/support almacenan el nombre de display; currentUser es el username de login.
+  // Comparamos contra ambos para cubrir datos históricos y futuros.
+  const displayName = (users[currentUser]||{}).name || '';
+  const resp = n.responsibles||[], supp = n.support||[];
+  return resp.includes(currentUser) || resp.includes(displayName) ||
+         supp.includes(currentUser) || supp.includes(displayName);
 }
 
 // Poda el árbol de un proyecto para mostrar solo las ramas donde el usuario participa.
