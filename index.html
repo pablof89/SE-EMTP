@@ -802,6 +802,7 @@ function openAdminUsersModal() {
           <select class="filter-select" style="height:26px;font-size:12px" onchange="changeUserRole('${u}',this.value)">
             ${roleOpts(uo.role||'viewer')}
           </select>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="openEditUserModal('${u}')" title="Editar datos y restablecer contraseña"><i class="fas fa-user-edit"></i></button>
         ${u !== currentUser ? `<button class="btn btn-danger btn-sm" onclick="removeUser('${u}')"><i class="fas fa-trash"></i></button>` : ''}
       </div>
     </div>`;
@@ -823,6 +824,47 @@ window.removeUser = function(u) {
 };
 window.changeUserRole = function(u, role) {
   users[u].role = role; saveData(); showToast(`Rol de ${u} actualizado a ${role}`, 'success');
+};
+
+// ── ADMIN: EDITAR DATOS DE USUARIO Y RESTABLECER CONTRASEÑA ───────────
+function genRandomPassword() {
+  return Math.random().toString(36).slice(-8);
+}
+window.openEditUserModal = function(u) {
+  if(!isAdmin) return;
+  const uo = users[u]; if(!uo) return;
+  const teamKeys = Object.keys(teams);
+  const teamOpts = `<option value="">(Sin equipo)</option>` +
+    teamKeys.map(k=>`<option value="${k}" ${uo.team===k?'selected':''}>${teams[k].name||k}</option>`).join('');
+  showModal(`
+    <h3><i class="fas fa-user-edit"></i> Editar usuario: <span style="font-weight:400;color:var(--text2)">@${u}</span></h3>
+    <div class="form-row"><label>Nombre</label><input id="eu-name" type="text" value="${(uo.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="form-row"><label>Correo electrónico</label><input id="eu-email" type="email" value="${(uo.email||'').replace(/"/g,'&quot;')}"></div>
+    <div class="form-row"><label>Equipo</label><select id="eu-team">${teamOpts}</select></div>
+    <div class="form-row" style="border-top:1px solid var(--border);padding-top:14px;margin-top:6px">
+      <label>Restablecer contraseña</label>
+      <div style="display:flex;gap:8px">
+        <input id="eu-newpass" type="text" placeholder="Nueva contraseña (dejar vacío para no cambiar)" style="flex:1">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('eu-newpass').value=genRandomPassword()"><i class="fas fa-dice"></i> Generar</button>
+      </div>
+      <span style="font-size:11px;color:var(--text3)">Si generas o escribes una contraseña, cópiala y entrégasela al usuario manualmente.</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="openAdminUsersModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditUser('${u}')"><i class="fas fa-save"></i> Guardar</button>
+    </div>`);
+};
+window.saveEditUser = function(u) {
+  const uo = users[u]; if(!uo) return;
+  uo.name = (document.getElementById('eu-name').value||'').trim() || u;
+  uo.email = (document.getElementById('eu-email').value||'').trim();
+  uo.team = document.getElementById('eu-team').value || '';
+  const newPass = (document.getElementById('eu-newpass').value||'').trim();
+  let passChanged = false;
+  if(newPass) { uo.password = newPass; passChanged = true; }
+  saveData();
+  closeModal();
+  showToast(passChanged ? `Datos actualizados y contraseña restablecida para ${u}` : `Datos de ${u} actualizados`, 'success');
 };
 
 // ── COMUNICACIÓN CON LA NUBE ──────────────────────────────────────────
