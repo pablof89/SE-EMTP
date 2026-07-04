@@ -467,6 +467,7 @@ tr:hover .row-add-btns{opacity:1}
 <div id="modalContainer"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 // ── TEMA CLARO/OSCURO ──────────────────────────────────────────────────
 // Se aplica antes de cualquier otra cosa para evitar parpadeo de tema.
@@ -1536,8 +1537,11 @@ function renderGantt() {
       <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:12px;height:8px;background:var(--task);border-radius:2px;display:inline-block"></span>Tarea</span>
       <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:12px;height:8px;background:var(--danger);border-radius:2px;display:inline-block"></span>Vencida</span>
       <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:2px;height:12px;background:var(--gantt-today);display:inline-block;border-radius:1px"></span>Hoy</span>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 4px"></div>
+      <button class="btn btn-ghost btn-sm" onclick="captureGanttImage('copy')" title="Copiar la carta Gantt como imagen (para pegar en Word, correo, etc.)"><i class="fas fa-copy"></i> Copiar imagen</button>
+      <button class="btn btn-ghost btn-sm" onclick="captureGanttImage('download')" title="Descargar la carta Gantt como imagen PNG"><i class="fas fa-camera"></i> Descargar imagen</button>
     </div>
-    <div class="gantt-outer">
+    <div class="gantt-outer" id="ganttCaptureArea">
       <div class="gantt-header-sticky">
         <div style="display:flex">
           <div class="gantt-label-col" style="min-height:36px;display:flex;align-items:center">Elemento</div>
@@ -2614,6 +2618,36 @@ function importBackup(input) {
   reader.readAsText(file);
 }
 
+// ── CAPTURA DE LA CARTA GANTT COMO IMAGEN ─────────────────────────────
+async function captureGanttImage(mode) {
+  if(typeof html2canvas === 'undefined') return showToast('Librería de captura no disponible. Intenta recargar la página.', 'error');
+  const el = document.getElementById('ganttCaptureArea');
+  if(!el) return showToast('No hay una carta Gantt visible para capturar', 'error');
+  showToast('Generando imagen…');
+  try {
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const canvas = await html2canvas(el, { backgroundColor: bg, scale: 2 });
+    if(mode === 'download') {
+      const link = document.createElement('a');
+      link.download = `gantt_emtp_${today()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('Imagen descargada', 'success');
+    } else {
+      canvas.toBlob(async (blob) => {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          showToast('Imagen copiada. Ya puedes pegarla (Ctrl/Cmd+V) en Word, correo, etc.', 'success');
+        } catch(err) {
+          showToast('No se pudo copiar al portapapeles. Prueba descargarla en su lugar.', 'error');
+        }
+      }, 'image/png');
+    }
+  } catch(err) {
+    showToast('Error al generar la imagen: ' + err.message, 'error');
+  }
+}
+
 function exportCSV() {
   const all=getAllNodes(data);
   const hdr=['Tipo','Nombre','Inicio','Fin','Horas','Responsables','Apoyo','Estado','Avance(%)'];
@@ -2644,7 +2678,7 @@ function exportXLSX() {
   // Anchos de columna
   ws['!cols']=[{wch:12},{wch:40},{wch:25},{wch:12},{wch:12},{wch:8},{wch:30},{wch:20},{wch:12},{wch:10},{wch:40}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,'Tablero EMTP',ws);
+  XLSX.utils.book_append_sheet(wb,ws,'Tablero EMTP');
   // Hoja de resumen
   const summary=[
     ['RESUMEN TABLERO SE EMTP',''],
@@ -2660,7 +2694,7 @@ function exportXLSX() {
   ];
   const ws2=XLSX.utils.aoa_to_sheet(summary);
   ws2['!cols']=[{wch:25},{wch:20}];
-  XLSX.utils.book_append_sheet(wb,'Resumen',ws2);
+  XLSX.utils.book_append_sheet(wb,ws2,'Resumen');
   XLSX.writeFile(wb,`tablero_emtp_${today()}.xlsx`);
   showToast('Excel exportado correctamente', 'success');
 }
