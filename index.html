@@ -42,6 +42,35 @@
   --shadow-lg:0 8px 32px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.06);
   --header-h:54px;
 }
+html[data-theme="dark"] {
+  --bg:#0f141b;
+  --surface:#171d27;
+  --surface2:#1e2530;
+  --surface3:#262e3b;
+  --border:#2a323f;
+  --border2:#3a4453;
+  --text:#e8ecf2;
+  --text2:#aab3c2;
+  --text3:#767f8f;
+  --accent:#4d8dff;
+  --accent-hover:#6b9fff;
+  --accent-bg:#16233d;
+  --accent-bg2:#1c2c4a;
+  --warn:#f5a623;
+  --warn-bg:#3a2e10;
+  --success:#34d399;
+  --success-bg:#0f3225;
+  --danger:#f87171;
+  --danger-bg:#3a1414;
+  --proj:#a78bfa;    --proj-bg:#241f42;
+  --act:#c4b5fd;     --act-bg:#241f42;
+  --task:#5eead4;    --task-bg:#0d2d2b;
+  --gantt-today:#fb7185;
+  --gantt-grid:rgba(255,255,255,.06);
+  --shadow:0 1px 4px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.2);
+  --shadow-md:0 4px 20px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.25);
+  --shadow-lg:0 8px 32px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.3);
+}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;min-height:100vh}
 .shell{display:flex;flex-direction:column;min-height:100vh}
@@ -354,12 +383,16 @@ tr:hover .row-add-btns{opacity:1}
     <div class="h-divider"></div>
     <button class="btn btn-ghost btn-sm" onclick="openTeamsModal()"><i class="fas fa-users"></i> Equipos</button>
     <button class="btn btn-ghost btn-sm" id="btnAdminUsers" style="display:none" onclick="openAdminUsersModal()"><i class="fas fa-user-shield"></i> Usuarios</button>
+    <button class="btn btn-ghost btn-sm" id="btnBackupDownload" style="display:none" onclick="downloadBackup()" title="Descargar respaldo completo (JSON)"><i class="fas fa-download"></i></button>
+    <button class="btn btn-ghost btn-sm" id="btnBackupImport" style="display:none" onclick="triggerImportBackup()" title="Restaurar desde un respaldo (JSON)"><i class="fas fa-upload"></i></button>
+    <input type="file" id="importBackupInput" accept="application/json" style="display:none" onchange="importBackup(this)">
     <div class="h-divider"></div>
     <div class="user-info">
       <div class="user-avatar" id="userAvatar">A</div>
       <span id="userName" style="font-weight:500;color:var(--text)">Usuario</span>
       <span id="userRoleBadge"></span>
     </div>
+    <button class="btn btn-ghost btn-sm" id="btnThemeToggle" onclick="toggleTheme()" title="Cambiar tema claro/oscuro"><i class="fas fa-moon"></i></button>
     <button class="btn btn-ghost btn-sm" onclick="openChangePasswordModal()" title="Cambiar contraseña"><i class="fas fa-key"></i></button>
     <button class="btn btn-ghost btn-sm" onclick="logout()" title="Cerrar sesión"><i class="fas fa-sign-out-alt"></i></button>
   </div>
@@ -433,6 +466,30 @@ tr:hover .row-add-btns{opacity:1}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+// ── TEMA CLARO/OSCURO ──────────────────────────────────────────────────
+// Se aplica antes de cualquier otra cosa para evitar parpadeo de tema.
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('emtp_theme'); } catch(e){}
+  if(saved === 'dark') {
+    document.documentElement.setAttribute('data-theme','dark');
+    const btn = document.getElementById('btnThemeToggle');
+    if(btn) btn.innerHTML = '<i class="fas fa-sun"></i>';
+  }
+})();
+window.toggleTheme = function() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if(isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem('emtp_theme','light'); } catch(e){}
+  } else {
+    document.documentElement.setAttribute('data-theme','dark');
+    try { localStorage.setItem('emtp_theme','dark'); } catch(e){}
+  }
+  const btn = document.getElementById('btnThemeToggle');
+  if(btn) btn.innerHTML = document.documentElement.getAttribute('data-theme')==='dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+};
+
 // ── CONFIGURACIÓN ─────────────────────────────────────────────────────
 const CLOUD_API_URL = "https://script.google.com/macros/s/AKfycbzqBk0peotIE0_ukuRzSAbr66nEi_q8Hjdap8QwvqPE-afmL26LMlUiikbxdvN2FhXX/exec";
 
@@ -450,6 +507,12 @@ let canEdit = false;
 let data = [];
 let users = {};
 let teams = {};
+let auditLog = []; // {date, user, action, detail}
+
+function addAudit(action, detail) {
+  auditLog.push({ date:new Date().toISOString(), user:currentUser, action, detail });
+  if(auditLog.length > 300) auditLog = auditLog.slice(-300); // cap para no crecer indefinidamente
+}
 let settings = { dueAlertDays: 3 };
 let fileStore = {};
 let collapsed = {};
@@ -589,6 +652,8 @@ async function attemptLogin() {
       if(result.payload.data) data = result.payload.data;
       if(result.payload.users) users = result.payload.users;
       if(result.payload.teams) teams = result.payload.teams;
+      if(result.payload.auditLog) auditLog = result.payload.auditLog;
+      _lastKnownModified = result.payload.lastModified || 0;
       const userObj = users[currentUser];
       // Normalizamos el rol (minúsculas + sin espacios) para evitar que variantes
       // como "Editor", "EDITOR" o " editor " degraden al usuario a solo lectura.
@@ -654,6 +719,8 @@ function iniciarApp() {
   const roleClasses = { admin:'role-admin', editor:'role-editor', viewer:'role-viewer' };
   document.getElementById('userRoleBadge').innerHTML = `<span class="role-badge ${roleClasses[currentRole]||'role-viewer'}">${roleLabels[currentRole]||currentRole}</span>`;
   document.getElementById('btnAdminUsers').style.display = isAdmin ? 'inline-flex' : 'none';
+  document.getElementById('btnBackupDownload').style.display = isAdmin ? 'inline-flex' : 'none';
+  document.getElementById('btnBackupImport').style.display = isAdmin ? 'inline-flex' : 'none';
   // Ocultar botones de agregar si solo lectura
   document.getElementById('addBtns').style.display = canEdit ? 'flex' : 'none';
   getAllNodes(data).forEach(n => {
@@ -671,36 +738,44 @@ function iniciarApp() {
   startPolling();
 }
 
-// ── SINCRONIZACIÓN EN TIEMPO REAL (POLLING) ───────────────────────────
-let _pollTimer = null;
-let _lastDataHash = '';
-const POLL_INTERVAL = 30000; // 30 segundos
+// ── SINCRONIZACIÓN EN TIEMPO REAL Y PRESENCIA (unificadas) ────────────
+// Un solo ciclo cada 20s: 'heartbeat' es una llamada liviana que registra
+// presencia y devuelve quién está en línea + un timestamp de última
+// modificación. Solo si ese timestamp cambió se pide el payload completo
+// ('load'), evitando transferir y comparar todo data/users/teams en cada
+// ciclo (antes: JSON.stringify completo cada 30s + heartbeat aparte cada 20s).
+let _syncTimer = null;
+const SYNC_INTERVAL = 20000; // 20 segundos
+let _lastKnownModified = 0;
 
-function hashData(d) {
-  // Hash rápido basado en JSON — detecta cualquier cambio en data/users/teams
-  try { return JSON.stringify(d); } catch(e) { return ''; }
-}
-
-async function pollForChanges() {
+async function syncTick() {
   if(!currentUser || !currentPass) return;
-  // No refrescar mientras el usuario tenga un modal abierto
-  if(document.getElementById('modal')?.style.display !== 'none') return;
   try {
     const res = await fetch(CLOUD_API_URL, {
       method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'login', user:currentUser, pass:currentPass })
+      body: JSON.stringify({ action:'heartbeat', user:currentUser, pass:currentPass })
     });
     const result = await res.json();
     if(result.status !== 'success') return;
-    const incoming = result.payload;
-    const newHash = hashData(incoming);
-    if(newHash === _lastDataHash) return; // sin cambios
-    _lastDataHash = newHash;
-    // Aplicar datos nuevos
+    if(Array.isArray(result.online)) renderOnlineUsers(result.online);
+
+    const remoteModified = result.lastModified || 0;
+    if(remoteModified === _lastKnownModified) return; // sin cambios en los datos
+    // No refrescar datos mientras el usuario tenga un modal abierto (evita pisar su edición)
+    if(document.getElementById('modal')?.style.display !== 'none') return;
+
+    const loadRes = await fetch(CLOUD_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'load', user:currentUser, pass:currentPass })
+    });
+    const loadResult = await loadRes.json();
+    if(loadResult.status !== 'success') return;
+    const incoming = loadResult.payload;
+    _lastKnownModified = remoteModified;
     if(incoming.data)  data  = incoming.data;
     if(incoming.users) users = incoming.users;
     if(incoming.teams) teams = incoming.teams;
-    // Normalizar campos que puedan faltar
+    if(incoming.auditLog) auditLog = incoming.auditLog;
     getAllNodes(data).forEach(n => {
       if(!n.responsibles) n.responsibles=[];
       if(!n.support) n.support=[];
@@ -711,37 +786,15 @@ async function pollForChanges() {
     });
     normalizeDatesInTree(data);
     renderAll();
-    // Indicador visual sutil
     const si = document.getElementById('lastSaved');
     if(si) { const h=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); si.textContent=`Sincronizado ${h}`; }
   } catch(e) { /* fallo silencioso, reintenta en el próximo ciclo */ }
 }
 
 function startPolling() {
-  if(_pollTimer) clearInterval(_pollTimer);
-  _lastDataHash = hashData({ data, users, teams });
-  _pollTimer = setInterval(pollForChanges, POLL_INTERVAL);
-  // Heartbeat de presencia cada 20s
-  sendHeartbeat();
-  if(_heartbeatTimer) clearInterval(_heartbeatTimer);
-  _heartbeatTimer = setInterval(sendHeartbeat, 20000);
-}
-
-// ── PRESENCIA / USUARIOS EN LÍNEA ────────────────────────────────────
-let _heartbeatTimer = null;
-
-async function sendHeartbeat() {
-  if(!currentUser || !currentPass) return;
-  try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'heartbeat', user:currentUser, pass:currentPass })
-    });
-    const result = await res.json();
-    if(result.status === 'success' && Array.isArray(result.online)) {
-      renderOnlineUsers(result.online);
-    }
-  } catch(e) { /* silencioso */ }
+  if(_syncTimer) clearInterval(_syncTimer);
+  syncTick();
+  _syncTimer = setInterval(syncTick, SYNC_INTERVAL);
 }
 
 function renderOnlineUsers(onlineList) {
@@ -763,8 +816,7 @@ function renderOnlineUsers(onlineList) {
 }
 
 function logout() {
-  if(_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
-  if(_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+  if(_syncTimer) { clearInterval(_syncTimer); _syncTimer = null; }
   const wrap = document.getElementById('onlineUsers'); if(wrap) wrap.style.display='none';
   // Al cerrar sesión borramos la sesión guardada: la próxima carga sí pedirá login.
   try { localStorage.removeItem('emtp_session'); } catch(e){}
@@ -875,12 +927,13 @@ async function saveData() {
   try {
     const res = await fetch(CLOUD_API_URL, {
       method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'save', user:currentUser, pass:currentPass, payload:{ data, users, teams } })
+      body: JSON.stringify({ action:'save', user:currentUser, pass:currentPass, payload:{ data, users, teams, auditLog } })
     });
     const rd = await res.json();
     if(rd.status === 'success') {
       const hora = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
       if(si) si.textContent = `Guardado ${hora}`;
+      if(rd.lastModified) _lastKnownModified = rd.lastModified; // evita re-fetch innecesario de nuestro propio guardado
     } else {
       if(si) si.textContent = `❌ ${rd.message}`;
     }
@@ -1104,6 +1157,7 @@ function updateField(id,field,val) {
   if(!canEdit) return showToast('No tienes permisos para editar', 'error');
   const n=findNode(id);
   if(n){
+    const oldVal = n[field];
     n[field]=val;
     // Al cambiar inicio o fin, validar que fin no sea anterior a inicio.
     if(field==='start' || field==='end'){
@@ -1113,12 +1167,23 @@ function updateField(id,field,val) {
         showToast(`La fecha de término se ajustó automáticamente al ${r.end.split('-').reverse().join('/')}`, 'warn');
       }
     }
+    // Registrar en el historial cambios relevantes (estado y fechas)
+    if(field==='status' && oldVal!==val) {
+      addAudit('status', `Cambió el estado de "${n.name}" de "${oldVal||'—'}" a "${val}"`);
+    } else if((field==='start'||field==='end') && oldVal!==val) {
+      const label = field==='start' ? 'inicio' : 'término';
+      addAudit('date', `Cambió la fecha de ${label} de "${n.name}" de "${oldVal||'—'}" a "${n[field]}"`);
+    }
     saveData(); renderAll();
   }
 }
 function deleteNode(id) {
   if(!canEdit) return showToast('No tienes permisos para eliminar', 'error');
-  if(confirm('¿Eliminar este elemento y todo su contenido?')){ removeNode(id,data); saveData(); renderAll(); }
+  const n = findNode(id);
+  if(confirm('¿Eliminar este elemento y todo su contenido?')){
+    if(n) addAudit('delete', `Eliminó ${typeLabel(n.type).toLowerCase()} "${n.name}"`);
+    removeNode(id,data); saveData(); renderAll();
+  }
 }
 function toggleCollapse(id) { collapsed[id]=!collapsed[id]; renderAll(); }
 
@@ -1306,6 +1371,7 @@ function handleDrop(e,targetId) {
     if(draggedNode.type===targetNode.type) { updatedTargetInfo.array.splice(updatedTargetInfo.index,0,draggedNode); }
     else { if(!targetNode.children) targetNode.children=[]; targetNode.children.push(draggedNode); collapsed[targetId]=false; }
   }
+  addAudit('move', `Movió "${draggedNode.name}" junto a/dentro de "${targetNode.name}"`);
   saveData(); renderAll(); return false;
 }
 
@@ -1844,6 +1910,19 @@ function renderReportes() {
           </div>`).join('')}
         </div>
       </div>
+    </div>
+    <div class="report-card" style="margin-top:16px">
+      <h4><i class="fas fa-history"></i> Historial de cambios</h4>
+      ${(()=>{
+        const entries = (auditLog||[]).slice(-50).reverse();
+        if(!entries.length) return '<div class="empty" style="padding:20px">Sin actividad registrada aún.</div>';
+        return `<div style="max-height:280px;overflow-y:auto;margin-top:8px">${entries.map(e=>`
+          <div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px">
+            <span style="color:var(--text3);white-space:nowrap;flex-shrink:0">${new Date(e.date).toLocaleString('es-CL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+            <span style="color:var(--accent);font-weight:600;flex-shrink:0">${e.user}</span>
+            <span style="color:var(--text2)">${e.detail}</span>
+          </div>`).join('')}</div>`;
+      })()}
     </div>`;
 }
 
@@ -2344,6 +2423,7 @@ function addNode(type) {
     objetivo:(document.getElementById('m-objetivo')?.value||'').trim(),
     status:'Pendiente', notes:'', deps:[], children:[]
   };
+  addAudit('create', `Creó ${typeLabel(type).toLowerCase()} "${name}"`);
   if(type==='actividad') {
     const pid=document.getElementById('m-parent-proj')?.value;
     if(pid){ const p=findNode(pid); if(p){ p.children.push(node); closeModal(); saveData(); renderAll(); return; } }
@@ -2479,6 +2559,39 @@ window.deleteTeam = function(id) {
 };
 
 // ── EXPORTAR ──────────────────────────────────────────────────────────
+// ── RESPALDO MANUAL (solo admin) ──────────────────────────────────────
+function downloadBackup() {
+  if(!isAdmin) return showToast('Solo administradores pueden descargar respaldos', 'error');
+  const backup = { exportedAt:new Date().toISOString(), exportedBy:currentUser, data, users, teams, auditLog };
+  const b=new Blob([JSON.stringify(backup,null,2)],{type:'application/json;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`respaldo_emtp_${today()}.json`; a.click();
+  showToast('Respaldo descargado', 'success');
+}
+function triggerImportBackup() {
+  if(!isAdmin) return showToast('Solo administradores pueden restaurar respaldos', 'error');
+  document.getElementById('importBackupInput').click();
+}
+function importBackup(input) {
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let parsed;
+    try { parsed = JSON.parse(e.target.result); } catch(err) { showToast('El archivo no es un JSON válido', 'error'); input.value=''; return; }
+    if(!parsed.data || !parsed.users) { showToast('El archivo no tiene el formato esperado de respaldo', 'error'); input.value=''; return; }
+    if(!confirm(`¿Restaurar este respaldo? Reemplazará TODOS los datos actuales (proyectos, usuarios y equipos) por los del archivo${parsed.exportedAt?` (exportado el ${new Date(parsed.exportedAt).toLocaleString('es-CL')})`:''}. Esta acción no se puede deshacer.`)) { input.value=''; return; }
+    data = parsed.data || [];
+    users = parsed.users || users;
+    teams = parsed.teams || {};
+    auditLog = parsed.auditLog || [];
+    addAudit('restore', `Restauró un respaldo${parsed.exportedAt?` del ${new Date(parsed.exportedAt).toLocaleString('es-CL')}`:''}`);
+    saveData();
+    renderAll();
+    showToast('Respaldo restaurado correctamente', 'success');
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
 function exportCSV() {
   const all=getAllNodes(data);
   const hdr=['Tipo','Nombre','Inicio','Fin','Horas','Responsables','Apoyo','Estado','Avance(%)'];
@@ -2557,6 +2670,8 @@ document.getElementById('loginScreen').style.display='flex';
         if(result.payload.data)  data  = result.payload.data;
         if(result.payload.users) users = result.payload.users;
         if(result.payload.teams) teams = result.payload.teams;
+        if(result.payload.auditLog) auditLog = result.payload.auditLog;
+        _lastKnownModified = result.payload.lastModified || 0;
         try { localStorage.setItem('emtp_session', JSON.stringify({ user:saved.user, pass:saved.pass, data, users, teams })); } catch(e){}
         renderAll();
       }).catch(()=>{}); // si no hay red, seguimos con los datos en caché
