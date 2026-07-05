@@ -1172,6 +1172,7 @@ function validateDates(start, end) {
 function updateField(id,field,val) {
   if(!canEdit) return showToast('No tienes permisos para editar', 'error');
   const n=findNode(id);
+  if(!canModifyNode(n)) return showToast('Solo puedes modificar elementos donde participas', 'error');
   if(n){
     const oldVal = n[field];
     n[field]=val;
@@ -1196,6 +1197,11 @@ function updateField(id,field,val) {
 function deleteNode(id) {
   if(!canEdit) return showToast('No tienes permisos para eliminar', 'error');
   const n = findNode(id);
+  if(!canDeleteNode(n)) {
+    return showToast(n && n.type==='proyecto'
+      ? 'Solo un administrador puede eliminar un proyecto completo'
+      : 'Solo puedes eliminar elementos donde participas', 'error');
+  }
   if(confirm('¿Eliminar este elemento y todo su contenido?')){
     if(n) addAudit('delete', `Eliminó ${typeLabel(n.type).toLowerCase()} "${n.name}"`);
     removeNode(id,data); saveData(); renderAll();
@@ -1238,6 +1244,29 @@ function userParticipates(n) {
   const resp = n.responsibles||[], supp = n.support||[];
   return resp.includes(currentUser) || resp.includes(displayName) ||
          supp.includes(currentUser) || supp.includes(displayName);
+}
+
+// ── PERMISOS GRANULARES (editores) ────────────────────────────────────
+// Un editor solo puede modificar/eliminar un nodo si participa en él
+// directamente (tarea) o en alguna de sus tareas hijas (actividad).
+// Los campos de un proyecto siguen siendo editables por cualquier editor
+// que participe en algún nodo del proyecto (ya filtrado en getVisibleData),
+// pero eliminar el proyecto COMPLETO queda reservado a administradores.
+function canModifyNode(n) {
+  if(!n) return false;
+  if(isAdmin) return true;
+  if(!canEdit) return false;
+  if(n.type === 'proyecto') return true;
+  if(n.type === 'tarea') return userParticipates(n);
+  if(n.type === 'actividad') return userParticipates(n) || (n.children||[]).some(userParticipates);
+  return false;
+}
+function canDeleteNode(n) {
+  if(!n) return false;
+  if(isAdmin) return true;
+  if(!canEdit) return false;
+  if(n.type === 'proyecto') return false; // solo admin elimina proyectos completos
+  return canModifyNode(n);
 }
 
 // Poda el árbol de un proyecto para mostrar solo las ramas donde el usuario participa.
@@ -1285,30 +1314,35 @@ function renderTabla() {
       const respHtml=(n.responsibles||[]).map(r=>`<span style="font-size:11px;background:var(--accent-bg);color:var(--accent);border-radius:4px;padding:2px 6px;white-space:nowrap">${r}</span>`).join(' ');
       const suppHtml=(n.support||[]).map(r=>`<span style="font-size:11px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;white-space:nowrap">${r}</span>`).join(' ');
       const teamHtml=[respHtml,suppHtml].filter(Boolean).join(' ')||`<span style="color:var(--text3);font-size:13px">—</span>`;
-      const editableAttrs = canEdit ? '' : 'disabled readonly style="pointer-events:none;opacity:.7"';
-      rows+=`<tr data-id="${n.id}" class="${n.type==='proyecto'?'row-proyecto':''}" ${canEdit?`draggable="true" ondragstart="handleDragStart(event,'${n.id}')" ondragend="handleDragEnd(event)" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'${n.id}')"`:''}>
+      // rowEdit: permiso real sobre ESTE nodo (además del permiso global canEdit).
+      // Un editor puede ver toda la fila pero solo interactuar si participa en
+      // ella (o, para actividades, en alguna de sus tareas).
+      const rowEdit = canModifyNode(n);
+      const rowDelete = canDeleteNode(n);
+      const editableAttrs = rowEdit ? '' : 'disabled readonly style="pointer-events:none;opacity:.7"';
+      rows+=`<tr data-id="${n.id}" class="${n.type==='proyecto'?'row-proyecto':''}" ${rowEdit?`draggable="true" ondragstart="handleDragStart(event,'${n.id}')" ondragend="handleDragEnd(event)" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'${n.id}')"`:''}>
         <td><div class="name-cell" style="padding-left:${indent}px">
-          ${canEdit?`<span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>`:''}
+          ${rowEdit?`<span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>`:''}
           ${hasC?`<button class="toggle-btn" onclick="toggleCollapse('${n.id}')"><i class="fas fa-chevron-${isCol?'right':'down'}"></i></button>`:`<span class="no-toggle"></span>`}
           <div style="margin-top:2px">${typeBadge(n.type)}</div>
-          <div class="${canEdit?'editable ':''} name-editable" style="${n.status==='Completado'?'text-decoration:line-through;color:var(--text3)':''}" ${canEdit?`contenteditable="true" onblur="updateField('${n.id}','name',this.innerText.trim())"`:''}>${n.name}</div>
+          <div class="${rowEdit?'editable ':''} name-editable" style="${n.status==='Completado'?'text-decoration:line-through;color:var(--text3)':''}" ${rowEdit?`contenteditable="true" onblur="updateField('${n.id}','name',this.innerText.trim())"`:''}>${n.name}</div>
           ${ab}
           <span class="row-add-btns">
             ${canEdit&&n.type!=='tarea'?`${n.type==='proyecto'?`<button class="row-add-btn" onclick="event.stopPropagation();openAddModalUnder('actividad','${n.id}')" title="Nueva actividad"><i class="fas fa-plus"></i> Act</button>`:''}
             <button class="row-add-btn" onclick="event.stopPropagation();openAddModalUnder('tarea','${n.id}')" title="Nueva tarea"><i class="fas fa-plus"></i> Tar</button>`:''}
-            ${canEdit&&n.type==='tarea'?`<button class="row-add-btn" onclick="event.stopPropagation();openLogModal('${n.id}')" title="Reportar avance"><i class="fas fa-clipboard-check"></i> Avance</button>`:''}
+            ${rowEdit&&n.type==='tarea'?`<button class="row-add-btn" onclick="event.stopPropagation();openLogModal('${n.id}')" title="Reportar avance"><i class="fas fa-clipboard-check"></i> Avance</button>`:''}
           </span>
         </div></td>
-        <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.start)}</span>`:`<input type="date" class="editable" value="${n.start||''}" onchange="updateField('${n.id}','start',this.value)" ${!canEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
-        <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.end)}</span>`:`<input type="date" class="editable" value="${n.end||''}" onchange="updateField('${n.id}','end',this.value)" ${!canEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
-        <td>${inherited?`<span style="font-size:12px;color:var(--text3)">${ch}h</span>`:`<input type="number" min="0" class="editable editable-num" value="${n.hours||0}" onchange="updateField('${n.id}','hours',+this.value)" ${!canEdit?'disabled':''}>`}</td>
+        <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.start)}</span>`:`<input type="date" class="editable" value="${n.start||''}" onchange="updateField('${n.id}','start',this.value)" ${!rowEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
+        <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.end)}</span>`:`<input type="date" class="editable" value="${n.end||''}" onchange="updateField('${n.id}','end',this.value)" ${!rowEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
+        <td>${inherited?`<span style="font-size:12px;color:var(--text3)">${ch}h</span>`:`<input type="number" min="0" class="editable editable-num" value="${n.hours||0}" onchange="updateField('${n.id}','hours',+this.value)" ${!rowEdit?'disabled':''}>`}</td>
         <td style="cursor:${canEdit?'pointer':'default'}" ${canEdit?`onclick="openEditModal('${n.id}')"`:''}><div style="display:flex;flex-wrap:wrap;gap:4px">${teamHtml}</div></td>
-        <td><select class="editable" onchange="updateField('${n.id}','status',this.value)" ${!canEdit?'disabled':''}>${['Pendiente','En curso','Completado','Bloqueado'].map(s=>`<option ${n.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+        <td><select class="editable" onchange="updateField('${n.id}','status',this.value)" ${!rowEdit?'disabled':''}>${['Pendiente','En curso','Completado','Bloqueado'].map(s=>`<option ${n.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
         <td>${pct!==null?`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:var(--text3);min-width:28px">${pct}%</span><div class="pct-bar-wrap"><div class="pct-bar" style="width:${pct}%"></div></div></div>`:'—'}</td>
-        <td><div class="dep-tags" ${canEdit?`onclick="openDepsModal('${n.id}')"`:''}>${depNames.length?depNames.map(d=>`<span class="dep-tag" title="${d}">${d.slice(0,14)}</span>`).join(''):`<span class="dep-add">${canEdit?'+ dep':'—'}</span>`}</div></td>
+        <td><div class="dep-tags" ${rowEdit?`onclick="openDepsModal('${n.id}')"`:''}>${depNames.length?depNames.map(d=>`<span class="dep-tag" title="${d}">${d.slice(0,14)}</span>`).join(''):`<span class="dep-add">${rowEdit?'+ dep':'—'}</span>`}</div></td>
         <td><span class="file-badge" onclick="openFilesModal('${n.id}')">${getNodeFiles(n.id).length||'+'}</span></td>
         <td><div style="display:flex;gap:4px">
-          ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn btn-danger btn-sm" onclick="deleteNode('${n.id}')"><i class="fas fa-trash"></i></button>`:`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-eye"></i></button>`}
+          ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-edit"></i></button>${rowDelete?`<button class="btn btn-danger btn-sm" onclick="deleteNode('${n.id}')"><i class="fas fa-trash"></i></button>`:''}`:`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-eye"></i></button>`}
         </div></td>
       </tr>`;
       if(hasC && !isCol) renderNodes(n.children, level+1);
@@ -1379,6 +1413,7 @@ function handleDrop(e,targetId) {
     (draggedNode.type==='proyecto' && targetNode.type!=='proyecto') ||
     (draggedNode.type==='actividad' && targetNode.type==='tarea');
   if(invalid) { showToast('No se puede mover ese elemento a esa ubicación', 'error'); return false; }
+  if(!canModifyNode(draggedNode)) { showToast('Solo puedes mover elementos donde participas', 'error'); return false; }
 
   dragInfo.array.splice(dragInfo.index,1);
   const updatedTargetInfo=findParentArrayAndIndex(targetId,data);
@@ -1673,8 +1708,11 @@ function kanbanColDrop(e, newStatus) {
   e.currentTarget.classList.remove('drag-over-col');
   if(!kanbanDragId || !canEdit) return;
   const n = findNode(kanbanDragId);
+  if(!canModifyNode(n)) { showToast('Solo puedes mover tareas donde participas', 'error'); kanbanDragId = null; return; }
   if(n && n.status !== newStatus) {
+    const oldStatus = n.status;
     n.status = newStatus;
+    addAudit('status', `Cambió el estado de "${n.name}" de "${oldStatus}" a "${newStatus}"`);
     saveData();
     renderAll();
     showToast(`Tarea movida a "${newStatus}"`, 'success');
@@ -2505,7 +2543,7 @@ function addNode(type) {
 window.openEditModal = function(id) {
   const n=findNode(id); if(!n) return;
   initRespWidget(n.responsibles||[], n.support||[], n.hoursPerPerson||{});
-  const readOnly = !canEdit;
+  const readOnly = !canModifyNode(n);
   const cd = computedDates(n);
   const hasChildren = n.children && n.children.length > 0;
   // Fecha inicio/fin: si tiene hijos, son calculadas (solo lectura); si no, editables
@@ -2539,6 +2577,7 @@ window.openEditModal = function(id) {
 window.saveEdit = function(id) {
   if(!canEdit) return;
   const n=findNode(id); if(!n) return;
+  if(!canModifyNode(n)) { closeModal(); return showToast('Solo puedes modificar elementos donde participas', 'error'); }
   const hasChildren = n.children && n.children.length > 0;
   n.name   = document.getElementById('m-name').value.trim();
   n.notes  = document.getElementById('m-notes').value.trim();
