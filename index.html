@@ -846,21 +846,47 @@ function startPolling() {
 }
 
 // ── NOTIFICACIONES DEL NAVEGADOR: TAREAS POR VENCER ───────────────────
+// El permiso del navegador (Notification.permission) no se puede revocar
+// desde JS una vez concedido — solo el usuario puede hacerlo desde los
+// ajustes del sitio. Por eso agregamos un "silencio" propio de la app
+// (independiente del permiso del navegador) para poder desactivarlas
+// desde el mismo botón sin tener que tocar la configuración del navegador.
+function isNotifMuted() {
+  if(!currentUser) return false;
+  try { return localStorage.getItem('emtp_notif_muted_'+currentUser) === 'true'; } catch(e){ return false; }
+}
+function setNotifMuted(muted) {
+  if(!currentUser) return;
+  try { localStorage.setItem('emtp_notif_muted_'+currentUser, muted ? 'true' : 'false'); } catch(e){}
+}
+
 function updateNotifBtnIcon() {
   const btn = document.getElementById('btnNotifPermission');
   if(!btn || !('Notification' in window)) return;
   const p = Notification.permission;
-  btn.innerHTML = p==='granted' ? '<i class="fas fa-bell"></i>' : '<i class="fas fa-bell-slash"></i>';
-  btn.title = p==='granted' ? 'Notificaciones activadas' : p==='denied' ? 'Notificaciones bloqueadas por el navegador' : 'Activar notificaciones de tareas por vencer';
+  const active = p==='granted' && !isNotifMuted();
+  btn.innerHTML = active ? '<i class="fas fa-bell"></i>' : '<i class="fas fa-bell-slash"></i>';
+  btn.title = p==='denied' ? 'Notificaciones bloqueadas por el navegador'
+    : p!=='granted' ? 'Activar notificaciones de tareas por vencer'
+    : active ? 'Notificaciones activadas (clic para silenciar)'
+    : 'Notificaciones silenciadas (clic para activar)';
 }
 
 window.requestNotifPermission = function() {
   if(!('Notification' in window)) return showToast('Tu navegador no soporta notificaciones', 'error');
-  if(Notification.permission === 'granted') { showToast('Las notificaciones ya están activadas', 'success'); checkDueNotifications(true); return; }
   if(Notification.permission === 'denied') return showToast('Están bloqueadas por el navegador. Actívalas desde los ajustes del sitio.', 'error');
+  if(Notification.permission === 'granted') {
+    // Ya se concedió el permiso: el botón alterna el silencio propio de la app.
+    const nowMuted = !isNotifMuted();
+    setNotifMuted(nowMuted);
+    updateNotifBtnIcon();
+    showToast(nowMuted ? 'Notificaciones silenciadas' : 'Notificaciones activadas', nowMuted ? 'warn' : 'success');
+    if(!nowMuted) checkDueNotifications(true);
+    return;
+  }
   Notification.requestPermission().then(perm => {
     updateNotifBtnIcon();
-    if(perm === 'granted') { showToast('Notificaciones activadas', 'success'); checkDueNotifications(true); }
+    if(perm === 'granted') { setNotifMuted(false); showToast('Notificaciones activadas', 'success'); checkDueNotifications(true); }
     else showToast('No se activaron las notificaciones', 'warn');
   });
 };
@@ -870,6 +896,7 @@ window.requestNotifPermission = function() {
 // (se usa al activar el permiso, para dar feedback inmediato).
 function checkDueNotifications(force) {
   if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  if(isNotifMuted()) return;
   if(!currentUser) return;
   const key = 'emtp_notified_' + currentUser;
   const todayStr = today();
