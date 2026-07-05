@@ -412,6 +412,7 @@ tr:hover .row-add-btns{opacity:1}
       <span id="userName" style="font-weight:500;color:var(--text)">Usuario</span>
       <span id="userRoleBadge"></span>
     </div>
+    <button class="btn btn-ghost btn-sm" id="btnNotifPermission" onclick="requestNotifPermission()" title="Activar notificaciones de tareas por vencer"><i class="fas fa-bell"></i></button>
     <button class="btn btn-ghost btn-sm" id="btnThemeToggle" onclick="toggleTheme()" title="Cambiar tema claro/oscuro"><i class="fas fa-moon"></i></button>
     <button class="btn btn-ghost btn-sm" onclick="openChangePasswordModal()" title="Cambiar contraseña"><i class="fas fa-key"></i></button>
     <button class="btn btn-ghost btn-sm" onclick="logout()" title="Cerrar sesión"><i class="fas fa-sign-out-alt"></i></button>
@@ -762,6 +763,8 @@ function iniciarApp() {
   renderAll();
   loadFilesFromDrive();
   startPolling();
+  updateNotifBtnIcon();
+  checkDueNotifications();
 }
 
 // ── SINCRONIZACIÓN EN TIEMPO REAL Y PRESENCIA (unificadas) ────────────
@@ -812,6 +815,7 @@ async function syncTick() {
     });
     normalizeDatesInTree(data);
     renderAll();
+    checkDueNotifications();
     const si = document.getElementById('lastSaved');
     if(si) { const h=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); si.textContent=`Sincronizado ${h}`; }
   } catch(e) { /* fallo silencioso, reintenta en el próximo ciclo */ }
@@ -821,6 +825,52 @@ function startPolling() {
   if(_syncTimer) clearInterval(_syncTimer);
   syncTick();
   _syncTimer = setInterval(syncTick, SYNC_INTERVAL);
+}
+
+// ── NOTIFICACIONES DEL NAVEGADOR: TAREAS POR VENCER ───────────────────
+function updateNotifBtnIcon() {
+  const btn = document.getElementById('btnNotifPermission');
+  if(!btn || !('Notification' in window)) return;
+  const p = Notification.permission;
+  btn.innerHTML = p==='granted' ? '<i class="fas fa-bell"></i>' : '<i class="fas fa-bell-slash"></i>';
+  btn.title = p==='granted' ? 'Notificaciones activadas' : p==='denied' ? 'Notificaciones bloqueadas por el navegador' : 'Activar notificaciones de tareas por vencer';
+}
+
+window.requestNotifPermission = function() {
+  if(!('Notification' in window)) return showToast('Tu navegador no soporta notificaciones', 'error');
+  if(Notification.permission === 'granted') { showToast('Las notificaciones ya están activadas', 'success'); checkDueNotifications(true); return; }
+  if(Notification.permission === 'denied') return showToast('Están bloqueadas por el navegador. Actívalas desde los ajustes del sitio.', 'error');
+  Notification.requestPermission().then(perm => {
+    updateNotifBtnIcon();
+    if(perm === 'granted') { showToast('Notificaciones activadas', 'success'); checkDueNotifications(true); }
+    else showToast('No se activaron las notificaciones', 'warn');
+  });
+};
+
+// Revisa tareas propias vencidas o por vencer y dispara UNA notificación
+// del navegador por día (para no ser invasivo). force=true ignora ese límite
+// (se usa al activar el permiso, para dar feedback inmediato).
+function checkDueNotifications(force) {
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  if(!currentUser) return;
+  const key = 'emtp_notified_' + currentUser;
+  const todayStr = today();
+  if(!force) {
+    let lastNotified = null;
+    try { lastNotified = localStorage.getItem(key); } catch(e){}
+    if(lastNotified === todayStr) return; // ya se notificó hoy
+  }
+  const myTasks = getAllNodes(data).filter(n => n.type==='tarea' && userParticipates(n) && n.status!=='Completado');
+  const overdue = myTasks.filter(isOverdue);
+  const soon = myTasks.filter(n => isDueSoon(n) && !isOverdue(n));
+  if(!overdue.length && !soon.length) return;
+  const parts = [];
+  if(overdue.length) parts.push(`${overdue.length} vencida${overdue.length>1?'s':''}`);
+  if(soon.length) parts.push(`${soon.length} por vencer pronto`);
+  try {
+    new Notification('Tablero SE EMTP', { body: `Tienes ${parts.join(' y ')}. Revisa "Mis Tareas".` });
+  } catch(e) { /* algunos navegadores requieren un service worker; fallamos en silencio */ }
+  try { localStorage.setItem(key, todayStr); } catch(e){}
 }
 
 function renderOnlineUsers(onlineList) {
