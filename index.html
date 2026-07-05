@@ -1201,6 +1201,39 @@ function openFilesModal(id) {
 
 // ── UTILERÍAS ─────────────────────────────────────────────────────────
 function genId() { return 'n'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+
+// ── DUPLICAR PROYECTO (plantilla) ──────────────────────────────────────
+// Clona un proyecto completo (con todas sus actividades y tareas) con IDs
+// nuevos. Mantiene estructura, horas y responsables/apoyo; reinicia
+// fechas, estado, log de avance, archivos y dependencias (que referencian
+// IDs del original y ya no aplicarían), para usarlo como punto de partida
+// de un nuevo ciclo del mismo tipo de proyecto.
+function cloneNodeAsTemplate(n, isRoot) {
+  return {
+    ...n,
+    id: genId(),
+    name: isRoot ? n.name : n.name,
+    start: '', end: '',
+    status: 'Pendiente',
+    log: [],
+    files: [],
+    deps: [],
+    children: (n.children||[]).map(c => cloneNodeAsTemplate(c, false))
+  };
+}
+window.duplicateProject = function(id) {
+  if(!canEdit) return showToast('No tienes permisos para duplicar proyectos', 'error');
+  const n = findNode(id);
+  if(!n || n.type !== 'proyecto') return;
+  const newName = prompt('Nombre del proyecto duplicado:', `${n.name} (copia)`);
+  if(newName === null) return; // canceló
+  const clone = cloneNodeAsTemplate(n, true);
+  clone.name = newName.trim() || `${n.name} (copia)`;
+  data.push(clone);
+  addAudit('create', `Duplicó el proyecto "${n.name}" como "${clone.name}"`);
+  saveData(); renderAll();
+  showToast(`Proyecto "${clone.name}" creado a partir de "${n.name}"`, 'success');
+};
 function getAllNodes(nodes, arr=[]) { nodes.forEach(n=>{ arr.push(n); if(n.children) getAllNodes(n.children, arr); }); return arr; }
 function findNode(id, nodes=data) { for(let n of nodes){ if(n.id===id) return n; if(n.children){ let f=findNode(id,n.children); if(f) return f; } } return null; }
 function findParentOfNode(id, nodes=data, parent=null) { for(let n of nodes){ if(n.id===id) return parent; if(n.children){ let f=findParentOfNode(id,n.children,n); if(f!==null) return f; } } return null; }
@@ -1578,7 +1611,7 @@ function renderTabla() {
         <td><div class="dep-tags" ${rowEdit?`onclick="openDepsModal('${n.id}')"`:''}>${depNames.length?depNames.map(d=>`<span class="dep-tag" title="${d}">${d.slice(0,14)}</span>`).join(''):`<span class="dep-add">${rowEdit?'+ dep':'—'}</span>`}</div></td>
         <td><span class="file-badge" onclick="openFilesModal('${n.id}')">${getNodeFiles(n.id).length||'+'}</span></td>
         <td><div style="display:flex;gap:4px">
-          ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-edit"></i></button>${rowDelete?`<button class="btn btn-danger btn-sm" onclick="deleteNode('${n.id}')"><i class="fas fa-trash"></i></button>`:''}`:`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-eye"></i></button>`}
+          ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-edit"></i></button>${n.type==='proyecto'?`<button class="btn btn-ghost btn-sm" onclick="duplicateProject('${n.id}')" title="Duplicar proyecto como plantilla"><i class="fas fa-copy"></i></button>`:''}${rowDelete?`<button class="btn btn-danger btn-sm" onclick="deleteNode('${n.id}')"><i class="fas fa-trash"></i></button>`:''}`:`<button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-eye"></i></button>`}
         </div></td>
       </tr>`;
       if(hasC && !isCol) renderNodes(n.children, level+1);
