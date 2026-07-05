@@ -157,7 +157,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:0
 .editable:hover{background:var(--surface2);border-color:var(--border)}
 .editable:focus{background:#fff;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .editable-num{width:52px;text-align:right}
-.name-editable{min-height:24px;line-height:1.4;word-break:break-word;white-space:normal}
+.name-editable{min-height:24px;line-height:1.4;word-break:break-word;white-space:normal;flex:1 1 120px}
 
 /* ── DRAG ────────────────────────────────────────────── */
 tr[draggable="true"]{cursor:grab}
@@ -300,6 +300,26 @@ tr:hover .row-add-btns{opacity:1}
 .repo-file-row:hover{background:var(--surface2)}
 .repo-file-row:last-child{border-bottom:none}
 .repo-file-proj{font-size:10px;background:var(--proj-bg);color:var(--proj);border-radius:4px;padding:2px 6px;font-weight:700;white-space:nowrap}
+
+/* ── RESPONSIVE / MÓVIL ────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .main{padding:12px}
+  .summary-bar{grid-template-columns:repeat(3,1fr)}
+  header{padding:0 10px;gap:6px;flex-wrap:wrap;height:auto;min-height:var(--header-h);padding-top:6px;padding-bottom:6px}
+  .header-actions{flex-wrap:wrap;gap:4px}
+  .tabs{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+  .tab{white-space:nowrap;flex-shrink:0}
+  .toolbar{gap:6px}
+  .modal{width:95vw;padding:18px}
+  .row-add-btns{display:none} /* solo tenían sentido con hover; en touch no aplican y roban espacio al nombre */
+  .name-cell{min-width:180px}
+}
+@media (max-width: 560px) {
+  .summary-bar{grid-template-columns:repeat(2,1fr)}
+  .s-val{font-size:19px}
+  .user-info span{display:none} /* ocultar nombre/rol de texto, dejar solo avatar */
+  .h-title{display:none} /* liberar espacio en el header en pantallas muy angostas */
+}
 </style>
 </head>
 <body>
@@ -1316,8 +1336,8 @@ function renderMisTareas() {
     const ov = isOverdue(n), soon = isDueSoon(n);
     const dateBadge = n.end ? `<span class="${ov?'date-overdue':soon?'date-today':''}" style="${!ov&&!soon?'color:var(--text3)':''};font-size:12px"><i class="fas fa-calendar-alt"></i> ${formatDate(n.end)}</span>` : '<span style="color:var(--text3);font-size:12px">Sin fecha</span>';
     const logCount = (n.log||[]).length;
-    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
-      <div style="flex:1;min-width:0">
+    return `<div class="mis-tareas-row" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
         <div style="font-weight:600;font-size:14px;${n.status==='Completado'?'text-decoration:line-through;color:var(--text3)':''}">${n.name}</div>
         <div style="font-size:11px;color:var(--text3);margin-top:2px">${proj}</div>
       </div>
