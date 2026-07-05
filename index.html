@@ -404,6 +404,7 @@ tr:hover .row-add-btns{opacity:1}
 
   <div class="toolbar">
     <div class="tabs">
+      <button class="tab" data-view="mistareas" onclick="switchView('mistareas',this)"><i class="fas fa-user-check"></i> Mis Tareas</button>
       <button class="tab active" data-view="tabla" onclick="switchView('tabla',this)"><i class="fas fa-table"></i> Tabla</button>
       <button class="tab" data-view="gantt" onclick="switchView('gantt',this)"><i class="fas fa-chart-gantt"></i> Gantt</button>
       <button class="tab" data-view="kanban" onclick="switchView('kanban',this)"><i class="fas fa-columns"></i> Kanban</button>
@@ -455,6 +456,7 @@ tr:hover .row-add-btns{opacity:1}
     </div>
   </div>
 
+  <div id="viewMisTareas" class="panel" style="display:none"></div>
   <div id="viewTabla" class="panel" style="overflow:hidden"></div>
   <div id="viewGantt" class="panel" style="display:none;overflow:hidden;padding:16px"></div>
   <div id="viewKanban" style="display:none"></div>
@@ -836,7 +838,7 @@ function logout() {
   // Historial, incluyendo el contenido residual del panel oculto.
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelector('.tab[data-view="tabla"]')?.classList.add('active');
-  ['Gantt','Kanban','Equipo','Reportes','Archivos','Historial'].forEach(n=>{
+  ['MisTareas','Gantt','Kanban','Equipo','Reportes','Archivos','Historial'].forEach(n=>{
     const el = document.getElementById('view'+n);
     if(el) { el.style.display='none'; el.innerHTML=''; }
   });
@@ -1131,7 +1133,8 @@ function renderAll() {
   if(wrap) wrap.style.display = v === 'tabla' ? '' : 'none';
   const personSel = document.getElementById('filterPerson');
   if(personSel) personSel.style.display = v === 'tabla' ? '' : 'none';
-  if(v==='tabla') renderTabla();
+  if(v==='mistareas') renderMisTareas();
+  else if(v==='tabla') renderTabla();
   else if(v==='gantt') renderGantt();
   else if(v==='kanban') renderKanban();
   else if(v==='equipo') renderEquipo();
@@ -1144,7 +1147,7 @@ function switchView(view, btn) {
   if(view === 'historial' && !isAdmin) return; // solo administradores
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
-  ['Tabla','Gantt','Kanban','Equipo','Reportes','Archivos','Historial'].forEach(n=>{
+  ['MisTareas','Tabla','Gantt','Kanban','Equipo','Reportes','Archivos','Historial'].forEach(n=>{
     const el = document.getElementById('view'+n);
     if(el) el.style.display = view===n.toLowerCase() ? 'block' : 'none';
   });
@@ -1291,6 +1294,47 @@ function getVisibleData() {
 function getVisibleDataPruned() {
   if(isAdmin) return data;
   return getVisibleData().map(pruneForUser).filter(Boolean);
+}
+
+// ── VISTA "MIS TAREAS" ────────────────────────────────────────────────
+// Lista plana y personal: solo las tareas donde el usuario actual participa
+// (responsable o apoyo), sin importar en qué proyecto estén, ordenadas por
+// urgencia (vencidas primero, luego por fecha de término más próxima).
+function renderMisTareas() {
+  const myTasks = getAllNodes(data).filter(n => n.type==='tarea' && userParticipates(n));
+
+  const rank = n => isOverdue(n) ? 0 : isDueSoon(n) ? 1 : 2;
+  myTasks.sort((a,b) => {
+    const r = rank(a) - rank(b);
+    if(r!==0) return r;
+    const da = a.end || '9999-99-99', db = b.end || '9999-99-99';
+    return da.localeCompare(db);
+  });
+
+  const rows = myTasks.length ? myTasks.map(n => {
+    const proj = (() => { let p=findParentOfNode(n.id); while(p){ if(p.type==='proyecto') return p.name; p=findParentOfNode(p.id); } return ''; })();
+    const ov = isOverdue(n), soon = isDueSoon(n);
+    const dateBadge = n.end ? `<span class="${ov?'date-overdue':soon?'date-today':''}" style="${!ov&&!soon?'color:var(--text3)':''};font-size:12px"><i class="fas fa-calendar-alt"></i> ${formatDate(n.end)}</span>` : '<span style="color:var(--text3);font-size:12px">Sin fecha</span>';
+    const logCount = (n.log||[]).length;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px;${n.status==='Completado'?'text-decoration:line-through;color:var(--text3)':''}">${n.name}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${proj}</div>
+      </div>
+      ${dateBadge}
+      <select class="editable" style="width:120px" onchange="updateField('${n.id}','status',this.value)" ${!canEdit?'disabled':''}>${['Pendiente','En curso','Completado','Bloqueado'].map(s=>`<option ${n.status===s?'selected':''}>${s}</option>`).join('')}</select>
+      ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openLogModal('${n.id}')"><i class="fas fa-clipboard-check"></i> Avance${logCount?` (${logCount})`:''}</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="openEditModal('${n.id}')"><i class="fas fa-edit"></i></button>
+    </div>`;
+  }).join('') : `<div class="empty" style="padding:40px"><i class="fas fa-check-circle" style="font-size:24px;margin-bottom:8px;display:block"></i>No tienes tareas asignadas.</div>`;
+
+  const overdueCount = myTasks.filter(isOverdue).length;
+  document.getElementById('viewMisTareas').innerHTML = `
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+      <h3 style="font-size:15px;font-weight:700"><i class="fas fa-user-check"></i> Mis Tareas <span style="font-size:12px;font-weight:400;color:var(--text3)">(${myTasks.length})</span></h3>
+      ${overdueCount ? `<span class="alert-badge">${overdueCount} vencida${overdueCount>1?'s':''}</span>` : ''}
+    </div>
+    <div>${rows}</div>`;
 }
 
 function renderTabla() {
