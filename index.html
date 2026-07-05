@@ -343,6 +343,10 @@ tr:hover .row-add-btns{opacity:1}
       <label>Contraseña</label>
       <input type="password" id="loginPass" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter') attemptLogin()">
     </div>
+    <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text2);margin-bottom:14px;cursor:pointer">
+      <input type="checkbox" id="rememberMe" style="width:auto">
+      Mantener sesión iniciada en este dispositivo
+    </label>
     <button class="btn btn-primary" id="btnLoginBtn" style="width:100%;height:42px;font-size:14px;font-weight:600" onclick="attemptLogin()"><i class="fas fa-sign-in-alt"></i> Iniciar sesión</button>
     <div class="toggle-auth" onclick="showRecover()">¿Olvidaste tu contraseña?</div>
     <div class="toggle-auth" onclick="toggleAuthMode()">¿No tienes cuenta? Solicitar acceso</div>
@@ -645,9 +649,15 @@ async function attemptChangePassword() {
     });
     const result = await res.json();
     if(result.status === 'success') {
-      // Actualizamos la credencial en memoria y la sesión guardada.
+      // Actualizamos la credencial en memoria. Solo tocamos localStorage si
+      // el usuario ya tenía una sesión persistida (opt-in previo); si nunca
+      // marcó "Mantener sesión iniciada", no empezamos a guardarla ahora.
       currentPass = nw;
-      try { localStorage.setItem('emtp_session', JSON.stringify({ user:currentUser, pass:nw, data, users, teams })); } catch(e){}
+      try {
+        if(localStorage.getItem('emtp_session')) {
+          localStorage.setItem('emtp_session', JSON.stringify({ user:currentUser, pass:nw, data, users, teams, savedAt:Date.now() }));
+        }
+      } catch(e){}
       closeModal();
       showToast('Contraseña actualizada correctamente', 'success');
     } else {
@@ -686,8 +696,16 @@ async function attemptLogin() {
       currentRole = userObj ? normalizeRole(userObj.role) : 'viewer';
       isAdmin = currentRole === 'admin';
       canEdit = currentRole === 'admin' || currentRole === 'editor';
-      // Guardamos sesión completa (credenciales + payload) para restaurar sin red al recargar.
-      try { localStorage.setItem('emtp_session', JSON.stringify({ user, pass, data, users, teams })); } catch(e){}
+      // Solo persistimos la sesión (incluida la contraseña) si el usuario lo
+      // pidió explícitamente marcando "Mantener sesión iniciada". Por defecto
+      // NO se guarda nada en localStorage, para no dejar la contraseña en
+      // texto plano indefinidamente en dispositivos compartidos.
+      const remember = document.getElementById('rememberMe')?.checked;
+      if(remember) {
+        try { localStorage.setItem('emtp_session', JSON.stringify({ user, pass, data, users, teams, savedAt:Date.now() })); } catch(e){}
+      } else {
+        try { localStorage.removeItem('emtp_session'); } catch(e){}
+      }
       iniciarApp();
     } else {
       err.textContent = result.message || 'Credenciales incorrectas';
@@ -2901,6 +2919,15 @@ document.getElementById('loginScreen').style.display='flex';
   try {
     const saved = JSON.parse(localStorage.getItem('emtp_session') || 'null');
     if(!saved || !saved.user || !saved.pass) return;
+    // Expiración de la sesión persistida: si pasaron más de 14 días desde que
+    // se guardó (o no tiene fecha, por venir de una versión anterior), la
+    // descartamos y se pide login de nuevo — para no dejar credenciales
+    // guardadas indefinidamente en un dispositivo.
+    const SESSION_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+    if(!saved.savedAt || (Date.now() - saved.savedAt) > SESSION_MAX_AGE_MS) {
+      try { localStorage.removeItem('emtp_session'); } catch(e){}
+      return;
+    }
     // Restauramos el payload guardado de inmediato — sin red, sin parpadeo de login.
     currentUser = saved.user; currentPass = saved.pass;
     if(saved.data)  data  = saved.data;
@@ -2921,7 +2948,7 @@ document.getElementById('loginScreen').style.display='flex';
         if(result.payload.teams) teams = result.payload.teams;
         if(result.payload.auditLog) auditLog = result.payload.auditLog;
         _lastKnownModified = result.payload.lastModified || 0;
-        try { localStorage.setItem('emtp_session', JSON.stringify({ user:saved.user, pass:saved.pass, data, users, teams })); } catch(e){}
+        try { localStorage.setItem('emtp_session', JSON.stringify({ user:saved.user, pass:saved.pass, data, users, teams, savedAt:saved.savedAt })); } catch(e){}
         renderAll();
       }).catch(()=>{}); // si no hay red, seguimos con los datos en caché
   } catch(e){}
