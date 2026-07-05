@@ -402,6 +402,7 @@ tr:hover .row-add-btns{opacity:1}
   <div class="header-actions">
     <span id="lastSaved" class="export-note"></span>
     <div id="onlineUsers" style="display:none;align-items:center;gap:4px;margin-right:6px" title="Usuarios en línea"></div>
+    <button class="btn btn-ghost btn-sm" onclick="openGlobalSearch()" title="Buscar en todo el tablero (Ctrl/Cmd+K)"><i class="fas fa-search"></i> Buscar</button>
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()"><i class="fas fa-file-csv"></i> CSV</button>
     <button class="btn btn-ghost btn-sm" onclick="exportXLSX()"><i class="fas fa-file-excel"></i> Excel</button>
     <div class="h-divider"></div>
@@ -563,6 +564,77 @@ function showModal(html) {
     `<div class="modal-overlay" onclick="overlayClose(event)"><div class="modal" onclick="event.stopPropagation()">${html}</div></div>`;
 }
 function closeModal() { document.getElementById('modalContainer').innerHTML = ''; }
+
+// ── BÚSQUEDA GLOBAL (Cmd/Ctrl+K) ──────────────────────────────────────
+window.openGlobalSearch = function() {
+  if(!currentUser) return; // sin sesión no hay nada que buscar
+  showModal(`
+    <div style="margin:-6px -6px 12px -6px">
+      <input id="gsInput" type="text" placeholder="Buscar proyecto, actividad o tarea…"
+        style="width:100%;font-size:15px;padding:10px 14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);outline:none"
+        oninput="renderGlobalSearchResults(this.value)">
+    </div>
+    <div id="gsResults" style="max-height:400px;overflow-y:auto"></div>
+  `);
+  setTimeout(() => { const inp=document.getElementById('gsInput'); if(inp) inp.focus(); }, 30);
+  renderGlobalSearchResults('');
+};
+
+function renderGlobalSearchResults(q) {
+  const wrap = document.getElementById('gsResults'); if(!wrap) return;
+  const term = q.trim().toLowerCase();
+  const all = getAllNodes(getVisibleData());
+  let results = term
+    ? all.filter(n => n.name.toLowerCase().includes(term) || (n.notes||'').toLowerCase().includes(term) || (n.responsibles||[]).some(r=>r.toLowerCase().includes(term)) || (n.support||[]).some(r=>r.toLowerCase().includes(term)))
+    : all;
+  results = results.slice(0, 30);
+  if(!results.length) { wrap.innerHTML = '<div class="empty" style="padding:24px">Sin resultados.</div>'; return; }
+  wrap.innerHTML = results.map(n => {
+    const proj = n.type==='proyecto' ? '' : (() => { let p=findParentOfNode(n.id); while(p){ if(p.type==='proyecto') return p.name; p=findParentOfNode(p.id); } return ''; })();
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''" onclick="goToNode('${n.id}')">
+      ${typeBadge(n.type)}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n.name}</div>
+        ${proj?`<div style="font-size:11px;color:var(--text3)">${proj}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Navega hasta un nodo desde cualquier vista: expande sus ancestros, limpia
+// filtros de Tabla que pudieran ocultarlo, y hace scroll + resalta la fila.
+window.goToNode = function(id) {
+  closeModal();
+  let p = findParentOfNode(id);
+  while(p) { collapsed[p.id] = false; p = findParentOfNode(p.id); }
+  const tablaBtn = document.querySelector('.tab[data-view="tabla"]');
+  if(tablaBtn) switchView('tabla', tablaBtn);
+  const searchInput = document.getElementById('searchInput'); if(searchInput) searchInput.value = '';
+  const fs = document.getElementById('filterStatus'); if(fs) fs.value = '';
+  const ft = document.getElementById('filterType'); if(ft) ft.value = '';
+  const fteam = document.getElementById('filterTeam'); if(fteam) fteam.value = '';
+  const fperson = document.getElementById('filterPerson'); if(fperson) fperson.value = '';
+  tablaFilterAll = true; tablaProjectFilter = new Set();
+  renderAll();
+  setTimeout(() => {
+    const row = document.querySelector(`tr[data-id="${id}"]`);
+    if(row) {
+      row.scrollIntoView({behavior:'smooth', block:'center'});
+      const orig = row.style.background;
+      row.style.background = 'var(--accent-bg)';
+      row.style.transition = 'background .6s';
+      setTimeout(() => { row.style.background = orig; }, 1500);
+    }
+  }, 60);
+};
+
+document.addEventListener('keydown', function(e) {
+  const isK = e.key === 'k' || e.key === 'K';
+  if((e.metaKey || e.ctrlKey) && isK) {
+    e.preventDefault();
+    openGlobalSearch();
+  }
+});
 function overlayClose(e) { if(e.target.classList.contains('modal-overlay')) closeModal(); }
 function showToast(msg, type='default', duration=3500) {
   const t = document.createElement('div');
