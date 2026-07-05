@@ -493,6 +493,7 @@ tr:hover .row-add-btns{opacity:1}
 </div>
 </div>
 <div id="modalContainer"></div>
+<div id="bulkActionBar" style="display:none;position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:10px 14px;z-index:900;align-items:center;gap:10px"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -1030,6 +1031,8 @@ function logout() {
     if(el) { el.style.display='none'; el.innerHTML=''; }
   });
   document.getElementById('viewTabla').style.display = '';
+  bulkSelected.clear();
+  const bar = document.getElementById('bulkActionBar'); if(bar) { bar.style.display='none'; bar.innerHTML=''; }
   showAuthBox('boxLogin');
 }
 
@@ -1344,6 +1347,7 @@ function switchView(view, btn) {
   document.getElementById('filterProjWrap').style.display = view === 'tabla' ? '' : 'none';
   document.getElementById('filterPerson').style.display = view === 'tabla' ? '' : 'none';
   if(view !== 'tabla') { const dd=document.getElementById('filterProjDropdown'); if(dd) dd.style.display='none'; }
+  if(view !== 'tabla') { bulkSelected.clear(); const bar=document.getElementById('bulkActionBar'); if(bar) bar.style.display='none'; }
   document.getElementById('addBtns').style.display = (canEdit && ['tabla','kanban'].includes(view)) ? 'flex' : 'none';
   renderAll();
 }
@@ -1552,6 +1556,7 @@ function renderTabla() {
       const rowDelete = canDeleteNode(n);
       const editableAttrs = rowEdit ? '' : 'disabled readonly style="pointer-events:none;opacity:.7"';
       rows+=`<tr data-id="${n.id}" class="${n.type==='proyecto'?'row-proyecto':''}" ${rowEdit?`draggable="true" ondragstart="handleDragStart(event,'${n.id}')" ondragend="handleDragEnd(event)" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'${n.id}')"`:''}>
+        <td>${rowEdit?`<input type="checkbox" ${bulkSelected.has(n.id)?'checked':''} onchange="toggleBulkSelect('${n.id}',this.checked)">`:''}</td>
         <td><div class="name-cell" style="padding-left:${indent}px">
           ${rowEdit?`<span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>`:''}
           ${hasC?`<button class="toggle-btn" onclick="toggleCollapse('${n.id}')"><i class="fas fa-chevron-${isCol?'right':'down'}"></i></button>`:`<span class="no-toggle"></span>`}
@@ -1616,9 +1621,10 @@ function renderTabla() {
   const tablaData = tablaFilterAll ? vdFiltered : (tablaProjectFilter.size===0 ? [] : vdFiltered.filter(n=>n.id && tablaProjectFilter.has(n.id)));
   renderNodes(tablaData, 0);
   document.getElementById('viewTabla').innerHTML=`<div style="overflow-x:auto"><table class="tree-table">
-    <thead><tr><th style="min-width:320px">Nombre</th><th>Inicio</th><th>Término</th><th>Horas</th><th style="min-width:140px">Personas</th><th>Estado</th><th>Avance</th><th>Dependencias</th><th><i class="fas fa-paperclip"></i></th><th></th></tr></thead>
-    <tbody>${rows||`<tr><td colspan="10"><div class="empty"><i class="fas fa-inbox" style="font-size:24px;margin-bottom:8px;display:block"></i>Sin resultados.</div></td></tr>`}</tbody>
+    <thead><tr><th style="width:32px"></th><th style="min-width:320px">Nombre</th><th>Inicio</th><th>Término</th><th>Horas</th><th style="min-width:140px">Personas</th><th>Estado</th><th>Avance</th><th>Dependencias</th><th><i class="fas fa-paperclip"></i></th><th></th></tr></thead>
+    <tbody>${rows||`<tr><td colspan="11"><div class="empty"><i class="fas fa-inbox" style="font-size:24px;margin-bottom:8px;display:block"></i>Sin resultados.</div></td></tr>`}</tbody>
   </table></div>`;
+  updateBulkActionBar();
 }
 
 // ── DRAG AND DROP ─────────────────────────────────────────────────────
@@ -1664,6 +1670,71 @@ let reportesProjectFilter = '';
 let tablaProjectFilter = new Set(); // IDs seleccionados; vacío + tablaFilterAll=true = todos
 let tablaFilterAll = true;
 function setGanttScale(s) { ganttScale = s; renderGantt(); }
+
+// ── ACCIONES EN BLOQUE (Tabla) ─────────────────────────────────────────
+let bulkSelected = new Set();
+
+window.toggleBulkSelect = function(id, checked) {
+  if(checked) bulkSelected.add(id); else bulkSelected.delete(id);
+  updateBulkActionBar();
+};
+
+function clearBulkSelection() {
+  bulkSelected.clear();
+  renderTabla();
+}
+
+function updateBulkActionBar() {
+  const bar = document.getElementById('bulkActionBar');
+  if(!bar) return;
+  if(bulkSelected.size === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = `
+    <span style="font-size:13px;font-weight:600">${bulkSelected.size} seleccionado${bulkSelected.size>1?'s':''}</span>
+    <div style="width:1px;height:20px;background:var(--border)"></div>
+    <select id="bulkStatusSelect" class="filter-select" style="height:32px;font-size:12px">
+      <option value="Pendiente">Pendiente</option><option value="En curso">En curso</option>
+      <option value="Completado">Completado</option><option value="Bloqueado">Bloqueado</option>
+    </select>
+    <button class="btn btn-primary btn-sm" onclick="bulkChangeStatus()"><i class="fas fa-check"></i> Cambiar estado</button>
+    <button class="btn btn-danger btn-sm" onclick="bulkDeleteSelected()"><i class="fas fa-trash"></i> Eliminar</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearBulkSelection()"><i class="fas fa-times"></i> Cancelar</button>
+  `;
+}
+
+window.bulkChangeStatus = function() {
+  const status = document.getElementById('bulkStatusSelect')?.value;
+  if(!status) return;
+  let applied = 0, skipped = 0;
+  bulkSelected.forEach(id => {
+    const n = findNode(id);
+    if(!n || !canModifyNode(n)) { skipped++; return; }
+    if(n.status !== status) {
+      addAudit('status', `Cambió el estado de "${n.name}" de "${n.status}" a "${status}" (acción en bloque)`);
+      n.status = status;
+    }
+    applied++;
+  });
+  bulkSelected.clear();
+  saveData(); renderAll();
+  showToast(`Estado actualizado en ${applied} elemento${applied!==1?'s':''}${skipped?`, ${skipped} omitido${skipped>1?'s':''} por permisos`:''}`, 'success');
+};
+
+window.bulkDeleteSelected = function() {
+  const ids = [...bulkSelected];
+  const deletable = ids.filter(id => canDeleteNode(findNode(id)));
+  const skipped = ids.length - deletable.length;
+  if(!deletable.length) { showToast('No tienes permisos para eliminar los elementos seleccionados', 'error'); return; }
+  if(!confirm(`¿Eliminar ${deletable.length} elemento${deletable.length>1?'s':''} y todo su contenido? Esta acción no se puede deshacer.`)) return;
+  deletable.forEach(id => {
+    const n = findNode(id);
+    if(n) addAudit('delete', `Eliminó ${typeLabel(n.type).toLowerCase()} "${n.name}" (acción en bloque)`);
+    removeNode(id, data);
+  });
+  bulkSelected.clear();
+  saveData(); renderAll();
+  showToast(`${deletable.length} elemento${deletable.length>1?'s':''} eliminado${deletable.length>1?'s':''}${skipped?`, ${skipped} omitido${skipped>1?'s':''} por permisos`:''}`, 'success');
+};
 
 function renderGantt() {
   // Si hay filtro de proyecto, solo mostramos ese proyecto y sus descendientes.
