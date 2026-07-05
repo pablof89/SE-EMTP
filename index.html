@@ -984,7 +984,7 @@ async function uploadFileToDrive(id) {
       const result = await res.json();
       if(result.status === 'success') {
         const node = findNode(id);
-        if(node){ if(!node.files) node.files=[]; node.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString(), uploadedBy:currentUser }); }
+        if(node){ if(!node.files) node.files=[]; node.files.push({ name:result.name, url:result.url, id:result.id, uploadedAt:new Date().toISOString(), uploadedBy:currentUser }); }
         saveData();
         showToast('Archivo subido correctamente', 'success');
         closeModal(); renderAll();
@@ -2020,7 +2020,15 @@ function renderArchivos() {
     const uploaderTag = f.uploadedBy ? `<span style="font-size:10px;color:var(--text3)"><i class="fas fa-user" style="margin-right:3px"></i>${f.uploadedBy}</span>` : '';
     const safeUrl = (f.url||'').replace(/'/g,"\\'");
     const safeNodeId = (f.nodeId||'').replace(/'/g,"\\'");
-    const deleteBtn = isAdmin && f.nodeId ? `<button class="btn btn-danger btn-sm" style="flex-shrink:0" onclick="deleteRepoFile('${safeNodeId}','${safeUrl}')" title="Eliminar archivo"><i class="fas fa-trash"></i></button>` : '';
+    const safeFileId = (f.id||'').replace(/'/g,"\\'");
+    // Archivos asociados a un nodo se borran quitando la referencia (y el
+    // archivo real de Drive si tenemos su id). Archivos huérfanos (subidos
+    // directo a Drive, sin asociación) se borran directo por su id.
+    const deleteBtn = !isAdmin ? '' : f.nodeId
+      ? `<button class="btn btn-danger btn-sm" style="flex-shrink:0" onclick="deleteRepoFile('${safeNodeId}','${safeUrl}')" title="Eliminar archivo"><i class="fas fa-trash"></i></button>`
+      : f.id
+        ? `<button class="btn btn-danger btn-sm" style="flex-shrink:0" onclick="deleteGlobalFile('${safeFileId}')" title="Eliminar archivo"><i class="fas fa-trash"></i></button>`
+        : '';
     return `<div class="repo-file-row">
       <i class="fas ${fileIcon(f.name)}" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
       <div style="flex:1;min-width:0">
@@ -2105,7 +2113,7 @@ async function uploadRepoFile() {
       const result = await res.json();
       if(result.status==='success') {
         const proj = findNode(projectId);
-        if(proj){ if(!proj.files) proj.files=[]; proj.files.push({ name:result.name, url:result.url, uploadedAt:new Date().toISOString(), uploadedBy:currentUser }); }
+        if(proj){ if(!proj.files) proj.files=[]; proj.files.push({ name:result.name, url:result.url, id:result.id, uploadedAt:new Date().toISOString(), uploadedBy:currentUser }); }
         saveData();
         showToast(`Archivo "${result.name}" subido exitosamente`, 'success');
         renderArchivos(); // muestra el archivo de inmediato
@@ -2116,16 +2124,48 @@ async function uploadRepoFile() {
   reader.readAsDataURL(file);
 }
 
-window.deleteRepoFile = function(nodeId, fileUrl) {
+window.deleteRepoFile = async function(nodeId, fileUrl) {
   if(!isAdmin) return showToast('Solo los administradores pueden eliminar archivos', 'error');
   if(!confirm('¿Eliminar este archivo del repositorio? Esta acción no se puede deshacer.')) return;
   const node = findNode(nodeId);
-  if(node && node.files) {
-    node.files = node.files.filter(f => f.url !== fileUrl);
-    saveData();
+  if(!node || !node.files) return;
+  const fileEntry = node.files.find(f => f.url === fileUrl);
+  // Si tenemos el id de Drive, borramos el archivo real (no solo la referencia).
+  // Los archivos subidos antes de este fix no tienen id: se quita la
+  // referencia igualmente para no bloquear al usuario, aunque el archivo
+  // permanezca en Drive (podrá borrarse manualmente ahí o reaparecerá en
+  // "Sin proyecto", donde ya se puede eliminar).
+  if(fileEntry && fileEntry.id) {
+    try {
+      const res = await fetch(CLOUD_API_URL, {
+        method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'deleteFile', user:currentUser, pass:currentPass, fileId:fileEntry.id })
+      });
+      const result = await res.json();
+      if(result.status !== 'success') { showToast('Error al eliminar de Drive: '+(result.message||''), 'error'); return; }
+    } catch(err) { showToast('Error de conexión al eliminar el archivo', 'error'); return; }
+  }
+  node.files = node.files.filter(f => f.url !== fileUrl);
+  fileStore['global'] = (fileStore['global']||[]).filter(f => f.url !== fileUrl);
+  saveData();
+  showToast('Archivo eliminado', 'success');
+  renderArchivos();
+};
+
+window.deleteGlobalFile = async function(fileId) {
+  if(!isAdmin) return showToast('Solo los administradores pueden eliminar archivos', 'error');
+  if(!confirm('¿Eliminar este archivo de Drive? Esta acción no se puede deshacer.')) return;
+  try {
+    const res = await fetch(CLOUD_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'deleteFile', user:currentUser, pass:currentPass, fileId })
+    });
+    const result = await res.json();
+    if(result.status !== 'success') return showToast('Error al eliminar: '+(result.message||''), 'error');
+    fileStore['global'] = (fileStore['global']||[]).filter(f => f.id !== fileId);
     showToast('Archivo eliminado', 'success');
     renderArchivos();
-  }
+  } catch(err) { showToast('Error de conexión al eliminar el archivo', 'error'); }
 };
 
 // ── MODAL PARTICIPACIÓN POR PERSONA ──────────────────────────────────
