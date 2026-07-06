@@ -402,7 +402,7 @@ tr:hover .row-add-btns{opacity:1}
   <div class="header-actions">
     <span id="lastSaved" class="export-note"></span>
     <div id="onlineUsers" style="display:none;align-items:center;gap:4px;margin-right:6px" title="Usuarios en línea"></div>
-    <button class="btn btn-ghost btn-sm" onclick="openGlobalSearch()" title="Buscar en todo el tablero (Ctrl/Cmd+K)"><i class="fas fa-search"></i> Buscar</button>
+    <button class="btn btn-ghost btn-sm" onclick="openGlobalSearch()" title="Buscar en todo el tablero (Ctrl/Cmd+/)"><i class="fas fa-search"></i> Buscar</button>
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()"><i class="fas fa-file-csv"></i> CSV</button>
     <button class="btn btn-ghost btn-sm" onclick="exportXLSX()"><i class="fas fa-file-excel"></i> Excel</button>
     <div class="h-divider"></div>
@@ -630,8 +630,12 @@ window.goToNode = function(id) {
 };
 
 document.addEventListener('keydown', function(e) {
+  // Cmd/Ctrl+K suele estar reservado por el navegador (barra de direcciones
+  // en Safari/Chrome) y nunca llega a la página. Cmd/Ctrl+/ es un atajo
+  // alterno que casi ningún navegador reserva, además del botón "Buscar".
   const isK = e.key === 'k' || e.key === 'K';
-  if((e.metaKey || e.ctrlKey) && isK) {
+  const isSlash = e.key === '/' || e.key === '?';
+  if((e.metaKey || e.ctrlKey) && (isK || isSlash)) {
     e.preventDefault();
     openGlobalSearch();
   }
