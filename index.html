@@ -336,8 +336,8 @@ tr:hover .row-add-btns{opacity:1}
     <div class="login-error" id="loginError"></div>
     <div class="login-success" id="loginSuccess"></div>
     <div class="form-row">
-      <label>Usuario</label>
-      <input type="text" id="loginUser" placeholder="Tu nombre de usuario" autofocus>
+      <label>Usuario o correo electrónico</label>
+      <input type="text" id="loginUser" placeholder="Tu usuario o correo electrónico" autofocus>
     </div>
     <div class="form-row">
       <label>Contraseña</label>
@@ -761,7 +761,10 @@ async function attemptLogin() {
     });
     const result = await res.json();
     if(result.status === 'success') {
-      currentUser = user; currentPass = pass;
+      // El backend acepta usuario o correo indistintamente y devuelve el
+      // username real en resolvedUser (aunque se haya escrito el correo).
+      currentUser = result.resolvedUser || user;
+      currentPass = pass;
       if(result.payload.data) data = result.payload.data;
       if(result.payload.users) users = result.payload.users;
       if(result.payload.teams) teams = result.payload.teams;
@@ -779,7 +782,7 @@ async function attemptLogin() {
       // texto plano indefinidamente en dispositivos compartidos.
       const remember = document.getElementById('rememberMe')?.checked;
       if(remember) {
-        try { localStorage.setItem('emtp_session', JSON.stringify({ user, pass, data, users, teams, savedAt:Date.now() })); } catch(e){}
+        try { localStorage.setItem('emtp_session', JSON.stringify({ user:currentUser, pass, data, users, teams, savedAt:Date.now() })); } catch(e){}
       } else {
         try { localStorage.removeItem('emtp_session'); } catch(e){}
       }
