@@ -5,41 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tablero de gestión SE EMTP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300;0,500;0,700;0,900;1,300&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 :root {
-  /* Paleta: gris slate fría + azul institucional + verde avance */
-  --bg:#eef1f5;
+  /* Paleta institucional "Somos TP": el azul es el negro, sin degradados,
+     bordes finos, radio 0 en tablas/controles y 12px en tarjetas. */
+  --bg:#ffffff;
   --surface:#ffffff;
-  --surface2:#f4f6f9;
-  --surface3:#e8ecf2;
-  --border:#dde2ea;
-  --border2:#c8cfd9;
-  --text:#18212f;
-  --text2:#5a6478;
-  --text3:#8c97aa;
-  --accent:#1b5fe8;
-  --accent-hover:#1449c4;
-  --accent-bg:#e8f0fd;
-  --accent-bg2:#dbe8fc;
-  --warn:#d97706;
-  --warn-bg:#fef3cd;
-  --success:#059669;
-  --success-bg:#d1fae5;
-  --danger:#dc2626;
-  --danger-bg:#fee2e2;
-  --proj:#4338ca;    --proj-bg:#ede9fe;
-  --act:#7c3aed;     --act-bg:#f3f0ff;
-  --task:#0e7490;    --task-bg:#cffafe;
-  --gantt-today:#f43f5e;
-  --gantt-grid:rgba(0,0,0,.05);
-  --radius:7px;
-  --radius-lg:11px;
-  --radius-xl:16px;
-  --shadow:0 1px 4px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.04);
-  --shadow-md:0 4px 20px rgba(0,0,0,.09),0 2px 6px rgba(0,0,0,.05);
-  --shadow-lg:0 8px 32px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.06);
+  --surface2:#e3eff9;
+  --surface3:#cbdce8;
+  --border:#6e93be;
+  --border2:#174582;
+  --text:#174582;
+  --text2:#555555;
+  --text3:#6b7a94;
+  --accent:#174582;
+  --accent-hover:#144683;
+  --accent-bg:#e3eff9;
+  --accent-bg2:#cbdce8;
+  --warn:#3b3164;
+  --warn-bg:#fce3d8;
+  --success:#107c74;
+  --success-bg:#e2f2f0;
+  --danger:#a3352e;
+  --danger-bg:#f8e3e1;
+  --proj:#174582;    --proj-bg:#e3eff9;
+  --act:#3b3164;     --act-bg:#e7e5ef;
+  --task:#107c74;    --task-bg:#e2f2f0;
+  --gantt-today:#a3352e;
+  --gantt-grid:rgba(23,69,130,.08);
+  /* Ejes del Plan Somos TP (mismos colores que el tablero de referencia) */
+  --eje-apr:#2458a3; --eje-apr-bg:#e4ecf6;
+  --eje-gob:#1363ac; --eje-gob-bg:#e1eaf5;
+  --eje-nor:#107c74; --eje-nor-bg:#e1f2f0;
+  --eje-val:#3b3164; --eje-val-bg:#e7e5ef;
+  --navy:#123363;
+  --radius:0px;
+  --radius-lg:12px;
+  --radius-xl:12px;
+  --shadow:none;
+  --shadow-md:none;
+  --shadow-lg:0 4px 24px rgba(23,69,130,.14);
   --header-h:54px;
 }
 html[data-theme="dark"] {
@@ -57,30 +64,35 @@ html[data-theme="dark"] {
   --accent-bg:#16233d;
   --accent-bg2:#1c2c4a;
   --warn:#f5a623;
-  --warn-bg:#3a2e10;
-  --success:#34d399;
-  --success-bg:#0f3225;
-  --danger:#f87171;
-  --danger-bg:#3a1414;
-  --proj:#a78bfa;    --proj-bg:#241f42;
-  --act:#c4b5fd;     --act-bg:#241f42;
-  --task:#5eead4;    --task-bg:#0d2d2b;
-  --gantt-today:#fb7185;
+  --warn-bg:#2e2740;
+  --success:#3fb3a8;
+  --success-bg:#0f2d2a;
+  --danger:#e0776e;
+  --danger-bg:#3a1f1c;
+  --proj:#6f96c9;    --proj-bg:#182840;
+  --act:#8f83b3;     --act-bg:#231f38;
+  --task:#3fb3a8;    --task-bg:#0f2d2a;
+  --gantt-today:#e0776e;
   --gantt-grid:rgba(255,255,255,.06);
-  --shadow:0 1px 4px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.2);
-  --shadow-md:0 4px 20px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.25);
-  --shadow-lg:0 8px 32px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.3);
+  --eje-apr:#5e8fc9; --eje-apr-bg:#182840;
+  --eje-gob:#4f9fd6; --eje-gob-bg:#16283a;
+  --eje-nor:#3fb3a8; --eje-nor-bg:#0f2d2a;
+  --eje-val:#8f83b3; --eje-val-bg:#231f38;
+  --shadow:none;
+  --shadow-md:none;
+  --shadow-lg:0 4px 24px rgba(0,0,0,.4);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;min-height:100vh}
+body{font-family:'Mulish','Segoe UI',sans-serif;font-weight:300;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;min-height:100vh}
+h1,h2,h3,h4{font-weight:900}
 .shell{display:flex;flex-direction:column;min-height:100vh}
 
 /* ── LOGIN ─────────────────────────────────────────── */
-.login-screen{position:fixed;inset:0;background:linear-gradient(145deg,#0f2358 0%,#1b5fe8 55%,#4338ca 100%);display:flex;align-items:center;justify-content:center;z-index:1000}
+.login-screen{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:1000}
 .login-screen::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
 .login-box{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);border-radius:var(--radius-xl);padding:44px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.28),0 4px 16px rgba(0,0,0,.12);position:relative;z-index:1}
 .login-logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
-.login-logo-mark{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--proj));border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:800;letter-spacing:-.02em;flex-shrink:0}
+.login-logo-mark{width:40px;height:40px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:800;letter-spacing:-.02em;flex-shrink:0}
 .login-logo-text{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.01em;line-height:1.2}
 .login-logo-text small{display:block;font-size:11px;font-weight:400;color:var(--text2);letter-spacing:0}
 .login-box h2{font-size:22px;font-weight:700;margin-bottom:6px;color:var(--text);letter-spacing:-.02em}
@@ -92,13 +104,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 
 /* ── HEADER ─────────────────────────────────────────── */
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:12px;height:var(--header-h);position:sticky;top:0;z-index:50;box-shadow:0 1px 0 var(--border),0 2px 8px rgba(0,0,0,.04)}
-.logo-mark{width:30px;height:30px;background:linear-gradient(135deg,var(--accent),var(--proj));border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;letter-spacing:-.02em}
+.logo-mark{width:30px;height:30px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;letter-spacing:-.02em}
 .h-title{font-size:13px;font-weight:500;color:var(--text2);flex-shrink:0}
 .h-divider{width:1px;height:18px;background:var(--border);flex-shrink:0}
 .spacer{flex:1}
 .header-actions{display:flex;gap:5px;align-items:center}
 .user-info{display:flex;align-items:center;gap:7px;padding:4px 10px 4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:default}
-.user-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--proj));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.user-avatar{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
 
 /* ── LAYOUT ─────────────────────────────────────────── */
 .main{flex:1;padding:18px 22px;display:flex;flex-direction:column;gap:14px;max-width:1680px;margin:0 auto;width:100%}
@@ -278,7 +290,7 @@ tr:hover .row-add-btns{opacity:1}
 .pct-bar-wrap{width:58px;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
 .pct-bar{height:100%;border-radius:3px;background:var(--success);transition:width .3s}
 .export-note{font-size:11px;color:var(--text3);font-style:italic}
-.online-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--success),#16a34a);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid var(--surface);cursor:default;position:relative;flex-shrink:0}
+.online-avatar{width:26px;height:26px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid var(--surface);cursor:default;position:relative;flex-shrink:0}
 .online-avatar::after{content:'';position:absolute;bottom:0;right:0;width:7px;height:7px;background:var(--success);border-radius:50%;border:1.5px solid var(--surface)}
 .online-dot{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;animation:pulse-online 2s ease-in-out infinite}
 @keyframes pulse-online{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}
@@ -446,6 +458,10 @@ tr:hover .row-add-btns{opacity:1}
       <button class="tab" id="tabHistorial" data-view="historial" style="display: flex;" onclick="switchView('historial',this)"><i class="fas fa-history"></i> Historial</button>
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-left:12px;flex-wrap:wrap" id="filterBar">
+      <select class="filter-select" id="projectViewSelect" style="display:none;font-weight:700" onchange="setProjectViewMode(this.value)" title="Qué proyectos mostrar">
+        <option value="mine">Mis proyectos</option>
+        <option value="all">Todos los proyectos</option>
+      </select>
       <input class="search-input" type="text" placeholder="Buscar..." id="searchInput" oninput="renderAll()">
       <select class="filter-select" id="filterStatus" onchange="renderAll()">
         <option value="" selected="selected">Todos los estados</option>
@@ -577,7 +593,7 @@ tr:hover .row-add-btns{opacity:1}
     <div class="toolbar-right" id="addBtns" style="position: relative; display: flex;">
       <button class="btn btn-primary" onclick="toggleCreateMenu(event)" id="btnCrear"><i class="fas fa-plus"></i> Crear <i class="fas fa-chevron-down" style="font-size:10px;margin-left:2px"></i></button>
       <div id="createMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;min-width:140px;padding:4px 0">
-        <button class="create-menu-item" onclick="closeCreateMenu();openAddModal('proyecto')"><i class="fas fa-folder" style="color:var(--proj);width:16px"></i> Proyecto</button>
+        <button class="create-menu-item" id="createProyectoBtn" onclick="closeCreateMenu();openAddModal('proyecto')"><i class="fas fa-folder" style="color:var(--proj);width:16px"></i> Proyecto</button>
         <button class="create-menu-item" onclick="closeCreateMenu();openAddModal('actividad')"><i class="fas fa-layer-group" style="color:var(--act);width:16px"></i> Actividad</button>
         <button class="create-menu-item" onclick="closeCreateMenu();openAddModal('tarea')"><i class="fas fa-check-square" style="color:var(--task);width:16px"></i> Tarea</button>
       </div>
@@ -1270,6 +1286,57 @@ let data = [];
 let users = {};
 let teams = {};
 let auditLog = []; // {date, user, action, detail}
+// PARCHE: por defecto cada persona ve solo los proyectos donde participa
+// ("mine"); puede cambiar a "all" para ver todos los proyectos, aunque no
+// participe en ellos. Se recuerda por navegador, no por servidor.
+let projectViewMode = localStorage.getItem('emtp_projectViewMode') || 'mine';
+// PARCHE: ejes y objetivos específicos del Plan Somos TP, para el campo
+// nuevo de cada proyecto. El color de cada eje coincide con el tablero de
+// referencia (Aprendizajes, Gobernanza, Normativa, Valoración TP).
+const EJES = [
+  { id:'Aprendizajes',  color:'--eje-apr', bg:'--eje-apr-bg' },
+  { id:'Gobernanza',    color:'--eje-gob', bg:'--eje-gob-bg' },
+  { id:'Normativa',     color:'--eje-nor', bg:'--eje-nor-bg' },
+  { id:'Valoración TP', color:'--eje-val', bg:'--eje-val-bg' },
+];
+const OBJETIVOS_ESPECIFICOS = [
+  { n:1, eje:'Aprendizajes',  texto:'Mejorar las capacidades que los actores necesitan para cumplir el propósito del sistema.' },
+  { n:2, eje:'Gobernanza',    texto:'Mejorar la comunicación, coordinación y cooperación entre los actores.' },
+  { n:3, eje:'Gobernanza',    texto:'Mejorar los flujos de información y los procesos de retroalimentación entre los actores.' },
+  { n:4, eje:'Normativa',     texto:'Mejorar el marco normativo en que opera la EMTP.' },
+  { n:5, eje:'Valoración TP', texto:'Presentar y promover en la sociedad el valor que genera el sistema EMTP.' },
+  { n:6, eje:'Valoración TP', texto:'Cambiar positivamente las percepciones y creencias, sobre cada actor y sobre el sistema, que son claves para el propósito de la EMTP.' },
+];
+function ejeColorVar(eje) { const e = EJES.find(x=>x.id===eje); return e ? `var(${e.color})` : 'var(--text3)'; }
+function ejeBgVar(eje) { const e = EJES.find(x=>x.id===eje); return e ? `var(${e.bg})` : 'var(--surface2)'; }
+function ejeBadgeHTML(eje) {
+  if(!eje) return '';
+  return `<span class="badge" style="background:${ejeBgVar(eje)};color:${ejeColorVar(eje)}">${esc(eje)}</span>`;
+}
+function ejeOptionsHTML(selected) {
+  return `<option value="">(Sin definir)</option>` + EJES.map(e=>`<option value="${e.id}" ${selected===e.id?'selected':''}>${e.id}</option>`).join('');
+}
+function objetivoOptionsHTML(selected, ejeFiltro) {
+  const list = ejeFiltro ? OBJETIVOS_ESPECIFICOS.filter(o=>o.eje===ejeFiltro) : OBJETIVOS_ESPECIFICOS;
+  const opts = list.map(o=>`<option value="${o.n}" ${String(selected)===String(o.n)?'selected':''}>OE${o.n} · ${esc(o.texto.slice(0,60))}${o.texto.length>60?'…':''}</option>`).join('');
+  return `<option value="">(Sin definir)</option>` + opts;
+}
+// Cuando cambia el Eje en el formulario, se filtran los Objetivos específicos
+// disponibles a los que corresponden a ese eje (relación fija del Plan).
+window.onEjeChange = function() {
+  const ejeSel = document.getElementById('m-eje');
+  const objSel = document.getElementById('m-objetivo-esp');
+  if(!ejeSel || !objSel) return;
+  const current = objSel.value;
+  objSel.innerHTML = objetivoOptionsHTML(current, ejeSel.value || null);
+};
+window.setProjectViewMode = function(mode) {
+  projectViewMode = mode;
+  try { localStorage.setItem('emtp_projectViewMode', mode); } catch(e){}
+  renderAll();
+  const sel = document.getElementById('projectViewSelect');
+  if(sel) sel.value = mode;
+};
 
 function addAudit(action, detail) {
   auditLog.push({ date:new Date().toISOString(), user:currentUser, action, detail });
@@ -1575,6 +1642,13 @@ function iniciarApp() {
   const roleClasses = { admin:'role-admin', editor:'role-editor', viewer:'role-viewer' };
   document.getElementById('userRoleBadge').innerHTML = `<span class="role-badge ${roleClasses[currentRole]||'role-viewer'}">${roleLabels[currentRole]||currentRole}</span>`;
   document.getElementById('btnAdminUsers').style.display = isAdmin ? 'inline-flex' : 'none';
+  // PARCHE: solo administradores pueden crear proyectos nuevos.
+  const cpBtn = document.getElementById('createProyectoBtn');
+  if(cpBtn) cpBtn.style.display = isAdmin ? 'flex' : 'none';
+  // PARCHE: el filtro "Mis proyectos / Todos los proyectos" solo tiene
+  // sentido para quien no es admin (un admin ya ve todo siempre).
+  const pvSel = document.getElementById('projectViewSelect');
+  if(pvSel) { pvSel.style.display = isAdmin ? 'none' : 'inline-block'; pvSel.value = projectViewMode; }
   document.getElementById('btnBackupDownload').style.display = isAdmin ? 'inline-flex' : 'none';
   document.getElementById('btnBackupImport').style.display = isAdmin ? 'inline-flex' : 'none';
   document.getElementById('tabHistorial').style.display = isAdmin ? 'flex' : 'none';
@@ -2218,16 +2292,16 @@ function userParticipates(n) {
 }
 
 // ── PERMISOS GRANULARES (editores) ────────────────────────────────────
-// Un editor solo puede modificar/eliminar un nodo si participa en él
-// directamente (tarea) o en alguna de sus tareas hijas (actividad).
-// Los campos de un proyecto siguen siendo editables por cualquier editor
-// que participe en algún nodo del proyecto (ya filtrado en getVisibleData),
-// pero eliminar el proyecto COMPLETO queda reservado a administradores.
+// Un editor solo puede modificar una actividad, tarea o proyecto si tiene
+// un rol asignado (participa) en algún nodo de esa rama — antes cualquier
+// editor podía modificar los campos de CUALQUIER proyecto, aunque no
+// participara en él; ahora se exige lo mismo que para el resto.
+// Eliminar el proyecto COMPLETO sigue reservado a administradores.
 function canModifyNode(n) {
   if(!n) return false;
   if(isAdmin) return true;
   if(!canEdit) return false;
-  if(n.type === 'proyecto') return true;
+  if(n.type === 'proyecto') return getAllNodes([n]).some(userParticipates);
   if(n.type === 'tarea') return userParticipates(n);
   if(n.type === 'actividad') return userParticipates(n) || (n.children||[]).some(userParticipates);
   return false;
@@ -2251,16 +2325,21 @@ function pruneForUser(n) {
 
 function getVisibleData() {
   if(isAdmin) return data;
-  // Devuelve los proyectos completos donde el usuario participa en algún nodo.
-  // (sin podar — para Kanban, Equipo, etc. se necesita el árbol completo)
+  // PARCHE: "Todos los proyectos" muestra el árbol completo aunque el
+  // usuario no participe; "Mis proyectos" (por defecto) sigue restringido
+  // a los proyectos donde participa en algún nodo.
+  if(projectViewMode === 'all') return data;
   return data.filter(n =>
     n.type === 'proyecto' && getAllNodes([n]).some(userParticipates)
   );
 }
 
 // Versión podada para vista Tabla: solo muestra los nodos donde el usuario participa.
+// En modo "Todos los proyectos" no se poda: se ve el árbol completo de cada
+// proyecto, igual que un administrador (pero sigue sin poder editar lo ajeno).
 function getVisibleDataPruned() {
   if(isAdmin) return data;
+  if(projectViewMode === 'all') return data;
   return getVisibleData().map(pruneForUser).filter(Boolean);
 }
 
@@ -2337,7 +2416,7 @@ function renderTabla() {
         <td><div class="name-cell" style="padding-left:${indent}px">
           ${rowEdit?`<span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>`:''}
           ${hasC?`<button class="toggle-btn" onclick="toggleCollapse('${n.id}')"><i class="fas fa-chevron-${isCol?'right':'down'}"></i></button>`:`<span class="no-toggle"></span>`}
-          <div style="margin-top:2px">${typeBadge(n.type)}</div>
+          <div style="margin-top:2px;display:flex;flex-direction:column;gap:3px;align-items:flex-start">${typeBadge(n.type)}${n.type==='proyecto'&&n.eje?ejeBadgeHTML(n.eje):''}</div>
           <div class="${rowEdit?'editable ':''} name-editable" style="${n.status==='Completado'?'text-decoration:line-through;color:var(--text3)':''}" ${rowEdit?`contenteditable="true" onblur="updateField('${n.id}','name',this.innerText.trim())"`:''}>${esc(n.name)}</div>
           ${ab}
           <span class="row-add-btns">
@@ -2847,7 +2926,7 @@ function renderEquipo() {
 
     html += `<div class="panel" style="padding:16px${overloaded?';border-top:3px solid var(--danger)':''}">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--accent-bg),var(--proj-bg));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0">${initials}</div>
+        <div style="width:40px;height:40px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0">${initials}</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;gap:5px" onclick="openPersonaModal('${safeResp}')" title="Ver participación">${esc(resp)}<i class="fas fa-list-ul" style="font-size:10px;color:var(--text3);opacity:.7"></i></div>
           ${user&&user.email?`<div style="font-size:11px;color:var(--accent)"><i class="fas fa-envelope"></i> ${user.email}</div>`:''}
@@ -3554,6 +3633,7 @@ window.handleRespSelect = function(e,type) {
 
 function openAddModal(type) {
   if(!canEdit) return showToast('Sin permisos para agregar elementos', 'error');
+  if(type==='proyecto' && !isAdmin) return showToast('Solo un administrador puede crear proyectos nuevos', 'error');
   initRespWidget([],[]);
   let parentHtml='';
   const projs = data.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
@@ -3565,14 +3645,20 @@ function openAddModal(type) {
   showModal(`<h3>Nuevo ${typeLabel(type)}</h3>
     ${parentHtml}
     <div class="form-row"><label>Nombre</label><input id="m-name" autofocus placeholder="Nombre del ${typeLabel(type).toLowerCase()}"></div>
-    ${type==='proyecto'?`<div class="form-row"><label>Objetivo del proyecto</label><textarea id="m-objetivo" placeholder="Describe el objetivo de este proyecto"></textarea></div>`:''}
+    ${type==='proyecto'?`<div class="form-grid">
+      <div class="form-row"><label>Eje</label><select id="m-eje" onchange="onEjeChange()">${ejeOptionsHTML('')}</select></div>
+      <div class="form-row"><label>Objetivo específico</label><select id="m-objetivo-esp">${objetivoOptionsHTML('', null)}</select></div>
+    </div>
+    <div class="form-row"><label>Objetivo del proyecto</label><textarea id="m-objetivo" placeholder="Describe el objetivo de este proyecto"></textarea></div>`:''}
     <div class="form-grid">
       <div class="form-row"><label>Inicio</label><input id="m-start" type="date"></div>
       <div class="form-row"><label>Fin</label><input id="m-end" type="date"></div>
     </div>
     <div class="form-row"><label>Horas estimadas</label><input id="m-hours" type="number" value="8" min="0" placeholder="8"></div>
+    ${isAdmin?`
     <div class="form-row"><label>Responsable(s)</label>${getRespWidgetHTML('responsibles')}</div>
-    <div class="form-row"><label>Apoyo</label>${getRespWidgetHTML('support')}</div>
+    <div class="form-row"><label>Apoyo</label>${getRespWidgetHTML('support')}</div>`:`
+    <div class="form-row"><label>Responsable(s) y apoyo</label><div class="hint" style="font-size:12px;color:var(--text3);font-style:italic">Solo un administrador puede asignar responsables y apoyos. Puedes crear el elemento y pedirle a un admin que asigne a las personas.</div></div>`}
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="addNode('${type}')"><i class="fas fa-plus"></i> Agregar</button></div>`);
 }
 
@@ -3588,6 +3674,7 @@ window.updateActDropdown = function() {
 };
 
 function addNode(type) {
+  if(type==='proyecto' && !isAdmin) return showToast('Solo un administrador puede crear proyectos nuevos', 'error');
   const name=document.getElementById('m-name').value.trim();
   if(!name) return;
   const rawDates = validateDates(
@@ -3600,10 +3687,13 @@ function addNode(type) {
     start:rawDates.start,
     end:rawDates.end,
     hours:+(document.getElementById('m-hours')?.value||8),
-    responsibles:[...window._mTeam.responsibles],
-    support:[...window._mTeam.support],
-    hoursPerPerson:{...window._mTeam.hoursPerPerson},
+    // PARCHE: solo un administrador puede asignar responsables/apoyos al crear.
+    responsibles: isAdmin ? [...window._mTeam.responsibles] : [],
+    support: isAdmin ? [...window._mTeam.support] : [],
+    hoursPerPerson: isAdmin ? {...window._mTeam.hoursPerPerson} : {},
     objetivo:(document.getElementById('m-objetivo')?.value||'').trim(),
+    eje:(document.getElementById('m-eje')?.value||''),
+    objetivoEspecifico:(document.getElementById('m-objetivo-esp')?.value||''),
     status:'Pendiente', notes:'', deps:[], children:[]
   };
   addAudit('create', `Creó ${typeLabel(type).toLowerCase()} "${name}"`);
@@ -3644,10 +3734,18 @@ window.openEditModal = function(id) {
       <div class="form-row"><label>Horas estimadas</label><input id="m-hours" type="number" min="0" value="${n.hours||0}" ${readOnly||hasChildren?'disabled':''}></div>
       <div class="form-row"><label>Estado</label><select id="m-status" ${readOnly?'disabled':''}>${statusOpts}</select></div>
     </div>
-    ${n.type==='proyecto'?`<div class="form-row"><label>Objetivo del proyecto</label><textarea id="m-objetivo" placeholder="Describe el objetivo de este proyecto" ${readOnly?'readonly':''}>${esc(n.objetivo||'')}</textarea></div>`:''}
+    ${n.type==='proyecto'?`<div class="form-grid">
+      <div class="form-row"><label>Eje</label><select id="m-eje" onchange="onEjeChange()" ${readOnly?'disabled':''}>${ejeOptionsHTML(n.eje||'')}</select></div>
+      <div class="form-row"><label>Objetivo específico</label><select id="m-objetivo-esp" ${readOnly?'disabled':''}>${objetivoOptionsHTML(n.objetivoEspecifico||'', n.eje||null)}</select></div>
+    </div>
+    <div class="form-row"><label>Objetivo del proyecto</label><textarea id="m-objetivo" placeholder="Describe el objetivo de este proyecto" ${readOnly?'readonly':''}>${esc(n.objetivo||'')}</textarea></div>`:''}
     <div class="form-row"><label>Notas</label><textarea id="m-notes" ${readOnly?'readonly':''}>${esc(n.notes||'')}</textarea></div>
+    ${isAdmin?`
     <div class="form-row"><label>Responsable(s)</label>${getRespWidgetHTML('responsibles')}</div>
-    <div class="form-row"><label>Apoyo</label>${getRespWidgetHTML('support')}</div>
+    <div class="form-row"><label>Apoyo</label>${getRespWidgetHTML('support')}</div>`:`
+    <div class="form-row"><label>Responsable(s)</label><div style="display:flex;flex-wrap:wrap;gap:4px">${(n.responsibles||[]).map(r=>`<span class="badge" style="background:var(--accent-bg);color:var(--accent)">${esc(r)}</span>`).join('')||'<span style="color:var(--text3);font-size:12px;font-style:italic">Sin asignar</span>'}</div></div>
+    <div class="form-row"><label>Apoyo</label><div style="display:flex;flex-wrap:wrap;gap:4px">${(n.support||[]).map(r=>`<span class="badge" style="background:var(--surface2);color:var(--text2)">${esc(r)}</span>`).join('')||'<span style="color:var(--text3);font-size:12px;font-style:italic">Sin asignar</span>'}</div></div>
+    <div class="hint" style="font-size:11px;color:var(--text3);font-style:italic;margin-top:-6px">Solo un administrador puede cambiar quién está asignado.</div>`}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       ${!readOnly?`<button class="btn btn-primary" onclick="saveEdit('${id}')"><i class="fas fa-save"></i> Guardar</button>`:''}
@@ -3663,6 +3761,10 @@ window.saveEdit = function(id) {
   n.status = document.getElementById('m-status').value;
   const objEl = document.getElementById('m-objetivo');
   if(objEl) n.objetivo = objEl.value.trim();
+  const ejeEl = document.getElementById('m-eje');
+  if(ejeEl) n.eje = ejeEl.value;
+  const objEspEl = document.getElementById('m-objetivo-esp');
+  if(objEspEl) n.objetivoEspecifico = objEspEl.value;
   if(!hasChildren) {
     const r = validateDates(
       document.getElementById('m-start').value,
@@ -3673,9 +3775,13 @@ window.saveEdit = function(id) {
     n.hours = +(document.getElementById('m-hours').value||0);
     if(r.fixed) showToast(`La fecha de término se ajustó automáticamente al ${r.end.split('-').reverse().join('/')}`, 'warn');
   }
-  n.responsibles    = [...window._mTeam.responsibles];
-  n.support         = [...window._mTeam.support];
-  n.hoursPerPerson  = {...window._mTeam.hoursPerPerson};
+  // PARCHE: solo un administrador puede cambiar responsables/apoyo. Si quien
+  // edita no es admin, el widget ni siquiera se mostró — se dejan intactos.
+  if(isAdmin) {
+    n.responsibles    = [...window._mTeam.responsibles];
+    n.support         = [...window._mTeam.support];
+    n.hoursPerPerson  = {...window._mTeam.hoursPerPerson};
+  }
   closeModal(); saveData(); renderAll();
 };
 
