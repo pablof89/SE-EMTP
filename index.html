@@ -2916,6 +2916,12 @@ function renderEquipo() {
     const nodesSupp = all.filter(n=>(n.support||[]).includes(resp));
     const tasksResp = nodesResp.filter(n=>n.type==='tarea');
     const tasksSupp = nodesSupp.filter(n=>n.type==='tarea');
+    // PARCHE (Equipo, opción A): además de las tareas puntuales, se muestra
+    // por separado cuántos proyectos/actividades tiene asignados a nivel
+    // general (donde antes no se reflejaba nada si solo se asignaba ahí).
+    const generalResp = nodesResp.filter(n=>n.type!=='tarea');
+    const generalSupp = nodesSupp.filter(n=>n.type!=='tarea');
+    const generalCount = new Set([...generalResp,...generalSupp]).size;
     const allTasksForUser = [...new Set([...tasksResp,...tasksSupp])];
     const overdue = allTasksForUser.filter(n=>isOverdue(n)).length;
     const completadas = allTasksForUser.filter(n=>n.status==='Completado').length;
@@ -2955,6 +2961,9 @@ function renderEquipo() {
           <i class="fas fa-clock" style="margin-right:3px"></i>${weeklyH} h/sem
         </span>
       </div>
+      ${generalCount>0?`<div style="margin-top:6px;font-size:11px;color:var(--accent);background:var(--accent-bg);border-radius:var(--radius);padding:5px 8px;display:flex;align-items:center;gap:5px">
+        <i class="fas fa-folder"></i> También responsable/apoyo general en ${generalCount} proyecto${generalCount!==1?'s':''}/actividad${generalCount!==1?'es':''} (sin tareas puntuales asignadas ahí)
+      </div>`:''}
     </div>`;
   }
   html += '</div>';
@@ -3384,7 +3393,10 @@ window.openPersonaModal = function(name) {
   }
 
   const sections = projects.map(proj => {
-    const children = getAllNodes([proj]).filter(c=>c.id!==proj.id);
+    // PARCHE: antes se excluía al proyecto mismo de la lista de nodos a
+    // revisar, así que si alguien era responsable/apoyo DIRECTAMENTE del
+    // proyecto (no de una actividad o tarea dentro de él), no aparecía acá.
+    const children = getAllNodes([proj]);
     const participating = children.filter(c=>(c.responsibles||[]).includes(name)||(c.support||[]).includes(name));
     if(!participating.length) return '';
 
