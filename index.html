@@ -597,8 +597,8 @@ tr:hover .row-add-btns{opacity:1}
       <button class="btn btn-primary" onclick="toggleCreateMenu(event)" id="btnCrear"><i class="fas fa-plus"></i> Crear <i class="fas fa-chevron-down" style="font-size:10px;margin-left:2px"></i></button>
       <div id="createMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;min-width:140px;padding:4px 0">
         <button class="create-menu-item" id="createProyectoBtn" onclick="closeCreateMenu();openAddModal('proyecto')"><i class="fas fa-folder" style="color:var(--proj);width:16px"></i> Proyecto</button>
-        <button class="create-menu-item" onclick="closeCreateMenu();openAddModal('actividad')"><i class="fas fa-layer-group" style="color:var(--act);width:16px"></i> Actividad</button>
-        <button class="create-menu-item" onclick="closeCreateMenu();openAddModal('tarea')"><i class="fas fa-check-square" style="color:var(--task);width:16px"></i> Tarea</button>
+        <button class="create-menu-item" onclick="closeCreateMenu();smartAddModal('actividad')"><i class="fas fa-layer-group" style="color:var(--act);width:16px"></i> Actividad</button>
+        <button class="create-menu-item" onclick="closeCreateMenu();smartAddModal('tarea')"><i class="fas fa-check-square" style="color:var(--task);width:16px"></i> Tarea</button>
       </div>
     </div>
   </div>
@@ -2093,6 +2093,55 @@ function calcPersonWeeklyHours(name) {
   return Math.round(weekly * 10) / 10; // redondeo a 1 decimal
 }
 
+// PARCHE (análisis de carga laboral, Reportes): a diferencia de
+// calcPersonWeeklyHours (que solo mira "responsables" y se usa en Equipo),
+// esta función considera tanto responsables como apoyo, y además calcula
+// cuántas tareas de esa persona se superponen en el tiempo — el dato clave
+// para saber si alguien está sobrecargado, más allá del promedio general.
+function calcPersonWorkload(name, scopeNodes) {
+  const tasks = getAllNodes(scopeNodes).filter(n =>
+    n.type==='tarea' && ((n.responsibles||[]).includes(name) || (n.support||[]).includes(name))
+  );
+  let totalHours = 0, weeklyAvg = 0;
+  const intervals = [];
+  tasks.forEach(t => {
+    const nPeople = Math.max(1, new Set([...(t.responsibles||[]),...(t.support||[])]).size);
+    const hoursForPerson = (t.hoursPerPerson && t.hoursPerPerson[name] != null)
+      ? t.hoursPerPerson[name]
+      : (t.hours||0) / nPeople;
+    totalHours += hoursForPerson;
+    let nWeeks = 1;
+    const start = normalizeDateStr(t.start), end = normalizeDateStr(t.end);
+    if(start && end) {
+      const ms = Math.max(0, parseDate(end) - parseDate(start));
+      nWeeks = Math.max(1, ms / (7*24*3600*1000));
+      intervals.push([parseDate(start).getTime(), parseDate(end).getTime()]);
+    }
+    weeklyAvg += hoursForPerson / nWeeks;
+  });
+  // Barrido de intervalos para el máximo de tareas simultáneas ("en paralelo").
+  let maxParallel = tasks.length ? 1 : 0;
+  if(intervals.length > 1) {
+    const points = [];
+    intervals.forEach(([a,b]) => { points.push([a,1]); points.push([b,-1]); });
+    points.sort((p,q)=>p[0]-q[0] || q[1]-p[1]);
+    let cur = 0;
+    points.forEach(([,delta]) => { cur += delta; if(cur>maxParallel) maxParallel = cur; });
+  }
+  return {
+    name, taskCount: tasks.length,
+    totalHours: Math.round(totalHours*10)/10,
+    weeklyAvg: Math.round(weeklyAvg*10)/10,
+    maxParallel
+  };
+}
+function workloadLevel(weeklyAvg) {
+  if(weeklyAvg === 0) return { label:'Sin carga', color:'var(--text3)', bg:'var(--surface2)' };
+  if(weeklyAvg > 40) return { label:'Sobrecarga', color:'var(--danger)', bg:'var(--danger-bg)' };
+  if(weeklyAvg >= 25) return { label:'Carga alta', color:'var(--warn)', bg:'var(--warn-bg)' };
+  return { label:'Normal', color:'var(--success)', bg:'var(--success-bg)' };
+}
+
 // Normaliza cualquier formato de fecha a YYYY-MM-DD.
 // Acepta: "YYYY-MM-DD", "DD/MM/YYYY", "DD-MM-YYYY", "MM/DD/YYYY" (ISO americano).
 // Retorna '' si no puede parsear.
@@ -3226,6 +3275,60 @@ function renderReportes() {
           </div>`).join('')}
         </div>
       </div>
+    </div>
+    <div style="margin-top:16px" class="report-card">
+      <h4><i class="fas fa-weight-hanging"></i> Análisis de Carga Laboral</h4>
+      <p style="font-size:11.5px;color:var(--text3);margin:-4px 0 12px">Considera todos los proyectos visibles para ti, sin importar el filtro de proyecto de arriba — para detectar sobrecarga hay que ver la carga completa de cada persona, no solo dentro de un proyecto.</p>
+      ${renderWorkloadTable(vd)}
+    </div>`;
+}
+
+// PARCHE (Reportes → Análisis de Carga Laboral, opción A del pedido original):
+// tabla con una fila por persona — tareas, horas totales, promedio semanal,
+// máximo de tareas simultáneas, y un semáforo de sobrecarga. Reaprovecha
+// calcPersonWorkload(), que ya considera responsables Y apoyo.
+function renderWorkloadTable(scopeNodes) {
+  const people = [...new Set(getAllNodes(scopeNodes).flatMap(n=>[...(n.responsibles||[]),...(n.support||[])]))];
+  if(!people.length) return '<div class="empty" style="padding:20px">Sin responsables ni apoyos asignados todavía.</div>';
+
+  const rows = people.map(p => calcPersonWorkload(p, scopeNodes)).sort((a,b)=>b.weeklyAvg-a.weeklyAvg);
+  const maxWeekly = Math.max(...rows.map(r=>r.weeklyAvg), 1);
+  const nOverload = rows.filter(r=>r.weeklyAvg>40).length;
+
+  const trs = rows.map(r => {
+    const lvl = workloadLevel(r.weeklyAvg);
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 10px;font-size:13px;font-weight:500">${esc(r.name)}</td>
+      <td style="padding:8px 10px;font-size:13px;text-align:center">${r.taskCount}</td>
+      <td style="padding:8px 10px;font-size:13px;text-align:center">${r.totalHours}h</td>
+      <td style="padding:8px 10px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="pct-bar-wrap" style="width:70px"><div class="pct-bar" style="width:${Math.min(100,Math.round(r.weeklyAvg/maxWeekly*100))}%;background:${lvl.color}"></div></div>
+          <span style="font-size:12px;color:var(--text2);white-space:nowrap">${r.weeklyAvg}h/sem</span>
+        </div>
+      </td>
+      <td style="padding:8px 10px;font-size:13px;text-align:center" title="Máximo de tareas de esta persona que se superponen en el tiempo">${r.maxParallel}</td>
+      <td style="padding:8px 10px"><span class="badge" style="background:${lvl.bg};color:${lvl.color}">${lvl.label}</span></td>
+    </tr>`;
+  }).join('');
+
+  return `
+    ${nOverload>0?`<div class="alert-item" style="margin-bottom:12px"><i class="fas fa-exclamation-triangle"></i> ${nOverload} persona${nOverload>1?'s':''} con carga por sobre 40h/semana.</div>`:''}
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:560px">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3);text-align:left">Persona</th>
+        <th style="padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3)">Tareas</th>
+        <th style="padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3)">Horas totales</th>
+        <th style="padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3);text-align:left">Promedio semanal</th>
+        <th style="padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3)" title="Máximo de tareas simultáneas en el tiempo">En paralelo (máx.)</th>
+        <th style="padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3);text-align:left">Estado</th>
+      </tr></thead>
+      <tbody>${trs}</tbody>
+    </table></div>
+    <div style="margin-top:10px;font-size:11px;color:var(--text3)">
+      <span class="badge" style="background:var(--danger-bg);color:var(--danger)">Sobrecarga</span> más de 40h/sem ·
+      <span class="badge" style="background:var(--warn-bg);color:var(--warn)">Carga alta</span> 25–40h/sem ·
+      <span class="badge" style="background:var(--success-bg);color:var(--success)">Normal</span> menos de 25h/sem
     </div>`;
 }
 
@@ -3608,6 +3711,17 @@ window.deleteLog = function(nodeId, i) {
 };
 
 // ── CREAR HIJO DESDE FILA ────────────────────────────────────────────
+// PARCHE: si ya estás dentro de un proyecto (vista Tabla, nivel 2) y usas el
+// botón general "Crear" del encabezado, la actividad o tarea nueva se
+// asocia por defecto a ese proyecto — igual que ya pasaba con los botones
+// "+ Act"/"+ Tar" de cada fila, que usan openAddModalUnder directamente.
+window.smartAddModal = function(type) {
+  if(type !== 'proyecto' && tablaSelectedProject) {
+    openAddModalUnder(type, tablaSelectedProject);
+  } else {
+    openAddModal(type);
+  }
+};
 window.openAddModalUnder = function(type, parentId) {
   openAddModal(type);
   const parent = findNode(parentId);
@@ -3889,16 +4003,51 @@ window.saveEdit = function(id) {
   closeModal(); saveData(); renderAll();
 };
 
+// Encuentra el proyecto (nodo de nivel superior) que contiene un id dado.
+function findRootProject(id) {
+  return data.find(p => getAllNodes([p]).some(n=>n.id===id)) || null;
+}
+
 window.openDepsModal = function(id) {
   if(!canEdit) return;
   const target=findNode(id); if(!target) return;
-  const allNodes=getAllNodes(data), descendants=[];
+  const descendants=[];
   getAllNodes([target],descendants);
   const descendantIds=descendants.map(d=>d.id);
-  let html=`<h3>Dependencias de: <span style="font-size:14px;font-weight:400;color:var(--text2)">${target.name}</span></h3>
-    <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Este elemento no comenzará hasta que los marcados estén Completados.</p>
+  // PARCHE: para una actividad o tarea, por defecto solo se muestran como
+  // posibles dependencias otros nodos del MISMO proyecto (antes aparecían
+  // mezclados los de todos los proyectos). Un proyecto sigue pudiendo
+  // depender de otro proyecto completo, eso no cambia.
+  const sameProjectOnly = target.type === 'tarea' || target.type === 'actividad';
+  const scopeProject = sameProjectOnly ? findRootProject(id) : null;
+  const candidateNodes = scopeProject ? getAllNodes([scopeProject]) : getAllNodes(data);
+  let html=`<h3>Dependencias de: <span style="font-size:14px;font-weight:400;color:var(--text2)">${esc(target.name)}</span></h3>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Este elemento no comenzará hasta que los marcados estén Completados.${scopeProject?` Se muestran solo elementos de <strong>${esc(scopeProject.name)}</strong>.`:''}</p>
     <div class="checkbox-list" id="depList">`;
-  allNodes.forEach(n=>{
+  candidateNodes.forEach(n=>{
+    if(!descendantIds.includes(n.id)&&n.id!==target.id){
+      const isChecked=(target.deps||[]).includes(n.id)?'checked':'';
+      html+=`<label class="checkbox-item"><input type="checkbox" value="${n.id}" ${isChecked}><span>${typeBadge(n.type)} ${esc(n.name)}</span></label>`;
+    }
+  });
+  if(sameProjectOnly) {
+    html+=`</div><div style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" onclick="expandDepsToAllProjects('${id}')"><i class="fas fa-globe"></i> Buscar también en otros proyectos</button></div>`;
+  } else {
+    html+=`</div>`;
+  }
+  html+=`<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveDeps('${id}')">Guardar</button></div>`;
+  showModal(html);
+};
+// Si de verdad se necesita una dependencia de otro proyecto (caso poco
+// común), este botón vuelve a abrir el modal mostrando TODOS los proyectos.
+window.expandDepsToAllProjects = function(id) {
+  const target=findNode(id); if(!target) return;
+  const descendants=[]; getAllNodes([target],descendants);
+  const descendantIds=descendants.map(d=>d.id);
+  let html=`<h3>Dependencias de: <span style="font-size:14px;font-weight:400;color:var(--text2)">${esc(target.name)}</span></h3>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Este elemento no comenzará hasta que los marcados estén Completados. Mostrando todos los proyectos.</p>
+    <div class="checkbox-list" id="depList">`;
+  getAllNodes(data).forEach(n=>{
     if(!descendantIds.includes(n.id)&&n.id!==target.id){
       const isChecked=(target.deps||[]).includes(n.id)?'checked':'';
       html+=`<label class="checkbox-item"><input type="checkbox" value="${n.id}" ${isChecked}><span>${typeBadge(n.type)} ${esc(n.name)}</span></label>`;
