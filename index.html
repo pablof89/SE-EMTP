@@ -280,6 +280,9 @@ tr:hover .row-add-btns{opacity:1}
 
 /* ── TEAM ────────────────────────────────────────────── */
 .team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.project-card{transition:border-color .15s,transform .1s}
+.project-card:hover{border-color:var(--accent)}
+.project-card:active{transform:scale(.995)}
 
 /* ── MISC ────────────────────────────────────────────── */
 .filter-select{height:30px;padding:0 9px;font-size:12px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);cursor:pointer}
@@ -1237,9 +1240,6 @@ tr:hover .row-add-btns{opacity:1}
   <div id="viewArchivos" class="panel" style="display:none;overflow:hidden"></div>
   <div id="viewHistorial" class="panel" style="display:none"></div>
 </div>
-<footer style="text-align:center;padding:20px 0 28px;font-size:12px;color:var(--text3);font-style:italic;border-top:1px solid var(--border);margin-top:10px">
-  Créditos a Elizabeth Cartagena por su idea original
-</footer>
 </div>
 <div id="modalContainer"></div>
 <div id="bulkActionBar" style="display:none;position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:10px 14px;z-index:900;align-items:center;gap:10px"></div>
@@ -2387,7 +2387,82 @@ function renderMisTareas() {
     <div>${rows}</div>`;
 }
 
+// ── VISTA TABLA: nivel 1 — grilla de proyectos ─────────────────────────
 function renderTabla() {
+  const cpBtn = document.getElementById('createProyectoBtn'); // no tocar, solo referencia
+  updateTablaSubToolbar();
+  if(tablaSelectedProject) {
+    const proj = findNode(tablaSelectedProject);
+    const visible = getVisibleData();
+    const stillVisible = proj && (isAdmin || visible.some(p=>p.id===proj.id));
+    if(proj && stillVisible) { renderTablaDetail(proj); return; }
+    tablaSelectedProject = null; // ya no existe o dejó de ser visible
+  }
+  renderTablaGrid();
+}
+
+// Oculta/muestra los controles que solo tienen sentido en el desglose de un
+// proyecto (filtro de tipo, de persona, de proyectos) — en la grilla no aplican.
+function updateTablaSubToolbar() {
+  const inDetail = !!tablaSelectedProject;
+  // El antiguo filtro "elegir proyectos" (casilleros) queda reemplazado por
+  // la navegación de tarjetas → clic; ya no aplica en ningún submodo de Tabla.
+  const projWrap = document.getElementById('filterProjWrap');
+  const personSel = document.getElementById('filterPerson');
+  const typeSel = document.getElementById('filterType');
+  if(projWrap) projWrap.style.display = 'none';
+  if(personSel) personSel.style.display = inDetail ? '' : 'none';
+  if(typeSel) typeSel.style.display = inDetail ? '' : 'none';
+}
+
+function renderTablaGrid() {
+  const f = getFilters();
+  const vd = getVisibleData().filter(n=>n.type==='proyecto');
+  const projs = vd
+    .filter(p => nodeMatchesFilter(p,f) || hasFilteredDescendant(p,f))
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+
+  const cards = projs.map(p => {
+    const allKids = getAllNodes([p]).filter(c=>c.id!==p.id);
+    const tasks = allKids.filter(c=>c.type==='tarea');
+    const done = tasks.filter(t=>t.status==='Completado').length;
+    const pct = tasks.length ? Math.round(done/tasks.length*100) : 0;
+    const ovKids = allKids.filter(c=>isOverdue(c)).length;
+    const cd = computedDates(p);
+    const respHtml=(p.responsibles||[]).map(r=>`<span style="font-size:11px;background:var(--accent-bg);color:var(--accent);border-radius:4px;padding:2px 6px;white-space:nowrap">${esc(r)}</span>`).join(' ');
+    const suppHtml=(p.support||[]).map(r=>`<span style="font-size:11px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;white-space:nowrap">${esc(r)}</span>`).join(' ');
+    const teamHtml=[respHtml,suppHtml].filter(Boolean).join(' ')||`<span style="color:var(--text3);font-size:12px;font-style:italic">Sin responsables asignados</span>`;
+    const objetivo = (p.objetivo||'').trim();
+    return `<div class="panel project-card" style="padding:16px;cursor:pointer" onclick="openProjectDetail('${p.id}')">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+          ${p.eje?ejeBadgeHTML(p.eje):''}
+          <div style="font-weight:700;font-size:15px;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(p.name)}</div>
+        </div>
+        ${ovKids>0?`<span class="alert-badge" style="flex-shrink:0"><i class="fas fa-exclamation-triangle" style="font-size:10px;margin-right:3px"></i>${ovKids}</span>`:''}
+      </div>
+      ${objetivo?`<p style="font-size:12.5px;color:var(--text2);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;min-height:16px">${esc(objetivo)}</p>`:`<p style="font-size:12px;color:var(--text3);font-style:italic;margin-bottom:10px">Sin objetivo definido</p>`}
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">${teamHtml}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text3);padding-top:10px;border-top:1px solid var(--border)">
+        <span><i class="fas fa-calendar" style="margin-right:3px"></i>${formatDate(cd.start)} → ${formatDate(cd.end)}</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="badge" style="background:${({Completado:'var(--success-bg)','En curso':'var(--accent-bg)',Pendiente:'var(--warn-bg)',Bloqueado:'var(--danger-bg)'})[p.status]||'var(--surface2)'};color:${({Completado:'var(--success)','En curso':'var(--accent)',Pendiente:'var(--warn)',Bloqueado:'var(--danger)'})[p.status]||'var(--text3)'}">${esc(p.status||'Pendiente')}</span>
+          <span style="font-weight:700;color:var(--accent)">${pct}%</span>
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('viewTabla').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 style="font-size:16px;font-weight:700">Proyectos <span style="font-size:13px;color:var(--text3);font-weight:400">(${projs.length})</span></h2>
+    </div>
+    ${cards ? `<div class="team-grid">${cards}</div>` : `<div class="empty"><i class="fas fa-folder-open" style="font-size:24px;margin-bottom:8px;display:block"></i>Sin proyectos para mostrar.</div>`}
+  `;
+}
+
+// ── VISTA TABLA: nivel 2 — desglose de un proyecto ─────────────────────
+function renderTablaDetail(proj) {
   const f=getFilters(); let rows='';
   function renderNodes(nodes, level) {
     for(let n of nodes) {
@@ -2413,7 +2488,6 @@ function renderTabla() {
       // ella (o, para actividades, en alguna de sus tareas).
       const rowEdit = canModifyNode(n);
       const rowDelete = canDeleteNode(n);
-      const editableAttrs = rowEdit ? '' : 'disabled readonly style="pointer-events:none;opacity:.7"';
       rows+=`<tr data-id="${n.id}" class="${n.type==='proyecto'?'row-proyecto':''}" ${rowEdit?`draggable="true" ondragstart="handleDragStart(event,'${n.id}')" ondragend="handleDragEnd(event)" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'${n.id}')"`:''}>
         <td>${rowEdit?`<input type="checkbox" ${bulkSelected.has(n.id)?'checked':''} onchange="toggleBulkSelect('${n.id}',this.checked)">`:''}</td>
         <td><div class="name-cell" style="padding-left:${indent}px">
@@ -2443,43 +2517,29 @@ function renderTabla() {
       if(hasC && !isCol) renderNodes(n.children, level+1);
     }
   }
-  // Poblar y aplicar filtro de persona
-  const vd = getVisibleData();
+  // Poblar y aplicar filtro de persona (acotado a este proyecto)
   const personSel = document.getElementById('filterPerson');
   if(personSel) {
     const selectedPerson = personSel.value;
-    const allPeople = [...new Set(getAllNodes(vd).flatMap(n=>[...(n.responsibles||[]),...(n.support||[])]))].sort((a,b)=>a.localeCompare(b,'es'));
+    const allPeople = [...new Set(getAllNodes([proj]).flatMap(n=>[...(n.responsibles||[]),...(n.support||[])]))].sort((a,b)=>a.localeCompare(b,'es'));
     personSel.innerHTML = `<option value="">Todas las personas</option>` +
       allPeople.map(p=>`<option value="${p}"${selectedPerson===p?' selected':''}>${p}</option>`).join('');
   }
   const tablaPersonFilter = personSel?.value || '';
-  // Aplicar filtro de persona: solo proyectos donde esa persona participa en algún nodo
-  const vdFiltered = tablaPersonFilter
-    ? vd.filter(n => n.type==='proyecto' && getAllNodes([n]).some(c=>(c.responsibles||[]).includes(tablaPersonFilter)||(c.support||[]).includes(tablaPersonFilter)))
-    : vd;
-  // Poblar y aplicar filtro de proyectos (multi-selección)
-  const projs = vdFiltered.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
-  // Si hay proyectos seleccionados que ya no son visibles para este usuario, resetear el filtro
-  if(!tablaFilterAll && tablaProjectFilter.size > 0) {
-    const visibleIds = new Set(projs.map(p=>p.id));
-    if(![...tablaProjectFilter].some(id=>visibleIds.has(id))) {
-      tablaProjectFilter = new Set(); tablaFilterAll = true;
-    }
-  }
-  const projList = document.getElementById('filterProjList');
-  if(projList) {
-    projList.innerHTML = projs.map(p=>`
-      <label style="display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:13px">
-        <input type="checkbox" value="${p.id}" ${tablaFilterAll||tablaProjectFilter.has(p.id)?'checked':''} onchange="toggleProjSelection(this)">
-        ${esc(p.name)}
-      </label>`).join('');
-  }
-  updateProjFilterLabel();
-  const allCb = document.getElementById('filterProjAll');
-  if(allCb) allCb.checked = tablaFilterAll;
-  const tablaData = tablaFilterAll ? vdFiltered : (tablaProjectFilter.size===0 ? [] : vdFiltered.filter(n=>n.id && tablaProjectFilter.has(n.id)));
+  const projRoot = tablaPersonFilter
+    && getAllNodes([proj]).some(c=>(c.responsibles||[]).includes(tablaPersonFilter)||(c.support||[]).includes(tablaPersonFilter))
+    ? proj : (tablaPersonFilter ? null : proj);
+  const tablaData = projRoot ? [projRoot] : [];
   renderNodes(tablaData, 0);
-  document.getElementById('viewTabla').innerHTML=`<div style="overflow-x:auto"><table class="tree-table">
+  const cd = computedDates(proj);
+  document.getElementById('viewTabla').innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="closeProjectDetail()"><i class="fas fa-arrow-left"></i> Volver a proyectos</button>
+      ${proj.eje?ejeBadgeHTML(proj.eje):''}
+      <span style="font-weight:700;font-size:15px">${esc(proj.name)}</span>
+      <span style="font-size:11px;color:var(--text3)">${formatDate(cd.start)} → ${formatDate(cd.end)}</span>
+    </div>
+    <div style="overflow-x:auto"><table class="tree-table">
     <thead><tr><th style="width:32px"></th><th style="min-width:320px">Nombre</th><th>Inicio</th><th>Término</th><th>Horas</th><th style="min-width:140px">Personas</th><th>Estado</th><th>Avance</th><th>Dependencias</th><th><i class="fas fa-paperclip"></i></th><th></th></tr></thead>
     <tbody>${rows||`<tr><td colspan="11"><div class="empty"><i class="fas fa-inbox" style="font-size:24px;margin-bottom:8px;display:block"></i>Sin resultados.</div></td></tr>`}</tbody>
   </table></div>`;
@@ -2528,6 +2588,18 @@ let ganttProjectFilter = '';
 let reportesProjectFilter = '';
 let tablaProjectFilter = new Set(); // IDs seleccionados; vacío + tablaFilterAll=true = todos
 let tablaFilterAll = true;
+// PARCHE: la vista Tabla ahora tiene dos niveles — una grilla de proyectos
+// (por defecto) y, al hacer clic en uno, el desglose completo de ese
+// proyecto (lo que antes era toda la vista Tabla). null = grilla.
+let tablaSelectedProject = null;
+window.openProjectDetail = function(id) { tablaSelectedProject = id; renderAll(); };
+window.closeProjectDetail = function() {
+  tablaSelectedProject = null;
+  bulkSelected.clear();
+  const bar = document.getElementById('bulkActionBar');
+  if(bar) bar.style.display = 'none';
+  renderAll();
+};
 function setGanttScale(s) { ganttScale = s; renderGantt(); }
 
 // ── ACCIONES EN BLOQUE (Tabla) ─────────────────────────────────────────
