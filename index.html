@@ -2136,10 +2136,8 @@ function calcPersonWorkload(name, scopeNodes) {
   };
 }
 function workloadLevel(weeklyAvg) {
-  if(weeklyAvg === 0) return { label:'Sin carga', color:'var(--text3)', bg:'var(--surface2)' };
-  if(weeklyAvg > 40) return { label:'Sobrecarga', color:'var(--danger)', bg:'var(--danger-bg)' };
-  if(weeklyAvg >= 25) return { label:'Carga alta', color:'var(--warn)', bg:'var(--warn-bg)' };
-  return { label:'Normal', color:'var(--success)', bg:'var(--success-bg)' };
+  if(weeklyAvg >= 42) return { label:'Sin disponibilidad horaria', color:'var(--danger)', bg:'var(--danger-bg)' };
+  return { label:'Con disponibilidad horaria', color:'var(--success)', bg:'var(--success-bg)' };
 }
 
 // Normaliza cualquier formato de fecha a YYYY-MM-DD.
@@ -3293,7 +3291,7 @@ function renderWorkloadTable(scopeNodes) {
 
   const rows = people.map(p => calcPersonWorkload(p, scopeNodes)).sort((a,b)=>b.weeklyAvg-a.weeklyAvg);
   const maxWeekly = Math.max(...rows.map(r=>r.weeklyAvg), 1);
-  const nOverload = rows.filter(r=>r.weeklyAvg>40).length;
+  const nOverload = rows.filter(r=>r.weeklyAvg>=42).length;
 
   const trs = rows.map(r => {
     const lvl = workloadLevel(r.weeklyAvg);
@@ -3313,7 +3311,7 @@ function renderWorkloadTable(scopeNodes) {
   }).join('');
 
   return `
-    ${nOverload>0?`<div class="alert-item" style="margin-bottom:12px"><i class="fas fa-exclamation-triangle"></i> ${nOverload} persona${nOverload>1?'s':''} con carga por sobre 40h/semana.</div>`:''}
+    ${nOverload>0?`<div class="alert-item" style="margin-bottom:12px"><i class="fas fa-exclamation-triangle"></i> ${nOverload} persona${nOverload>1?'s':''} sin disponibilidad horaria (42h/semana o más).</div>`:''}
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:560px">
       <thead><tr style="border-bottom:1px solid var(--border)">
         <th style="padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3);text-align:left">Persona</th>
@@ -3326,9 +3324,8 @@ function renderWorkloadTable(scopeNodes) {
       <tbody>${trs}</tbody>
     </table></div>
     <div style="margin-top:10px;font-size:11px;color:var(--text3)">
-      <span class="badge" style="background:var(--danger-bg);color:var(--danger)">Sobrecarga</span> más de 40h/sem ·
-      <span class="badge" style="background:var(--warn-bg);color:var(--warn)">Carga alta</span> 25–40h/sem ·
-      <span class="badge" style="background:var(--success-bg);color:var(--success)">Normal</span> menos de 25h/sem
+      <span class="badge" style="background:var(--danger-bg);color:var(--danger)">Sin disponibilidad horaria</span> 42h/sem o más ·
+      <span class="badge" style="background:var(--success-bg);color:var(--success)">Con disponibilidad horaria</span> menos de 42h/sem
     </div>`;
 }
 
