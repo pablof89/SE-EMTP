@@ -334,6 +334,13 @@ tr:hover .row-add-btns{opacity:1}
   .s-val{font-size:19px}
   .user-info span{display:none} /* ocultar nombre/rol de texto, dejar solo avatar */
   .h-title{display:none} /* liberar espacio en el header en pantallas muy angostas */
+  /* PARCHE (mejora #8, revisión móvil): */
+  #filterBar{margin-left:0;width:100%}
+  #filterBar > *{flex:1 1 auto;min-width:0}
+  .team-grid{grid-template-columns:1fr} /* una tarjeta por fila — mejor que forzar 290px mínimo en una pantalla más angosta */
+  .project-card{padding:13px;display:flex;flex-direction:column}
+  .project-card > div:first-child{position:static !important;justify-content:flex-end;margin-bottom:8px;order:-1} /* los botones de editar/eliminar bajan arriba del título en vez de superponerse */
+  .project-card > div:nth-child(2) > div:first-child{padding-right:0 !important}
 }
 </style>
 </head>
@@ -422,6 +429,7 @@ tr:hover .row-add-btns{opacity:1}
     <button class="btn btn-ghost btn-sm" onclick="exportXLSX()"><i class="fas fa-file-excel"></i> Excel</button>
     <div class="h-divider"></div>
     <button class="btn btn-ghost btn-sm" onclick="openTeamsModal()"><i class="fas fa-users"></i> Equipos</button>
+    <button class="btn btn-ghost btn-sm" id="btnTrash" style="display: none;" onclick="openTrashModal()" title="Papelera"><i class="fas fa-trash-restore"></i></button>
     <button class="btn btn-ghost btn-sm" id="btnAdminUsers" style="display: inline-flex;" onclick="openAdminUsersModal()"><i class="fas fa-user-shield"></i> Usuarios</button>
     <button class="btn btn-ghost btn-sm" id="btnBackupDownload" style="display: inline-flex;" onclick="downloadBackup()" title="Descargar respaldo completo (JSON)"><i class="fas fa-download"></i></button>
     <button class="btn btn-ghost btn-sm" id="btnBackupImport" style="display: inline-flex;" onclick="triggerImportBackup()" title="Restaurar desde un respaldo (JSON)"><i class="fas fa-upload"></i></button>
@@ -476,6 +484,10 @@ tr:hover .row-add-btns{opacity:1}
       </select>
       <select class="filter-select" id="filterTeam" onchange="renderAll()"><option value="" selected="selected">Todos los equipos</option><option value="tmq8tu3vc">Fortalecimiento</option><option value="tmq9nphbe">Gestión</option></select>
       <select class="filter-select" id="filterPerson" style="" onchange="renderTabla()"><option value="" selected="selected">Todas las personas</option></select>
+      <select class="filter-select" id="filterEje" style="display:none" onchange="renderTabla()">
+        <option value="">Todos los ejes</option>
+        <option>Aprendizajes</option><option>Gobernanza</option><option>Normativa</option><option>Valoración TP</option>
+      </select>
       <div id="filterProjWrap" style="position: relative;">
         <button id="filterProjBtn" class="filter-select" style="cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap" onclick="toggleProjFilter(event)">
           <i class="fas fa-filter" style="font-size:10px"></i>
@@ -1289,6 +1301,10 @@ let data = [];
 let users = {};
 let teams = {};
 let auditLog = []; // {date, user, action, detail}
+// PARCHE (papelera): en vez de borrar para siempre, deleteNode() guarda una
+// copia aquí junto con dónde estaba (para poder restaurarla). Se sincroniza
+// igual que data/users/teams. Se purgan solas las entradas de más de 30 días.
+let trash = []; // {node, parentId (null = proyecto de nivel superior), originalIndex, deletedAt, deletedBy}
 // PARCHE: por defecto cada persona ve solo los proyectos donde participa
 // ("mine"); puede cambiar a "all" para ver todos los proyectos, aunque no
 // participe en ellos. Se recuerda por navegador, no por servidor.
@@ -1537,7 +1553,7 @@ async function attemptChangePassword() {
       currentPass = nw;
       try {
         if(localStorage.getItem('emtp_session')) {
-          localStorage.setItem('emtp_session', JSON.stringify({ user:currentUser, pass:nw, data, users, teams, savedAt:Date.now() }));
+          localStorage.setItem('emtp_session', JSON.stringify({ user:currentUser, pass:nw, data, users, teams, trash, savedAt:Date.now() }));
         }
       } catch(e){}
       closeModal();
@@ -1570,6 +1586,7 @@ async function attemptLogin() {
       if(result.payload.data) data = result.payload.data;
       if(result.payload.users) users = result.payload.users;
       if(result.payload.teams) teams = result.payload.teams;
+      if(result.payload.trash) trash = result.payload.trash;
       if(result.payload.auditLog) auditLog = result.payload.auditLog;
       _lastKnownModified = result.payload.lastModified || 0;
       const userObj = users[currentUser];
@@ -1584,7 +1601,7 @@ async function attemptLogin() {
       // texto plano indefinidamente en dispositivos compartidos.
       const remember = document.getElementById('rememberMe')?.checked;
       if(remember) {
-        try { localStorage.setItem('emtp_session', JSON.stringify({ user, pass, data, users, teams, savedAt:Date.now() })); } catch(e){}
+        try { localStorage.setItem('emtp_session', JSON.stringify({ user, pass, data, users, teams, trash, savedAt:Date.now() })); } catch(e){}
       } else {
         try { localStorage.removeItem('emtp_session'); } catch(e){}
       }
@@ -1645,6 +1662,8 @@ function iniciarApp() {
   const roleClasses = { admin:'role-admin', editor:'role-editor', viewer:'role-viewer' };
   document.getElementById('userRoleBadge').innerHTML = `<span class="role-badge ${roleClasses[currentRole]||'role-viewer'}">${roleLabels[currentRole]||currentRole}</span>`;
   document.getElementById('btnAdminUsers').style.display = isAdmin ? 'inline-flex' : 'none';
+  const trashBtn = document.getElementById('btnTrash');
+  if(trashBtn) trashBtn.style.display = canEdit ? 'inline-flex' : 'none';
   // PARCHE: solo administradores pueden crear proyectos nuevos.
   const cpBtn = document.getElementById('createProyectoBtn');
   if(cpBtn) cpBtn.style.display = isAdmin ? 'flex' : 'none';
@@ -1711,6 +1730,7 @@ async function syncTick() {
     if(incoming.data)  data  = incoming.data;
     if(incoming.users) users = incoming.users;
     if(incoming.teams) teams = incoming.teams;
+    if(incoming.trash) trash = incoming.trash;
     if(incoming.auditLog) auditLog = incoming.auditLog;
     getAllNodes(data).forEach(n => {
       if(!n.responsibles) n.responsibles=[];
@@ -1968,7 +1988,7 @@ async function saveData() {
   try {
     const res = await fetch(CLOUD_API_URL, {
       method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'save', user:currentUser, pass:currentPass, payload:{ data, users, teams, auditLog } })
+      body: JSON.stringify({ action:'save', user:currentUser, pass:currentPass, payload:{ data, users, teams, auditLog, trash } })
     });
     const rd = await res.json();
     if(rd.status === 'success') {
@@ -2261,6 +2281,7 @@ function switchView(view, btn) {
   document.getElementById('filterBar').style.display = showFilters ? 'flex' : 'none';
   document.getElementById('filterProjWrap').style.display = view === 'tabla' ? '' : 'none';
   document.getElementById('filterPerson').style.display = view === 'tabla' ? '' : 'none';
+  document.getElementById('filterEje').style.display = view === 'tabla' ? '' : 'none';
   if(view !== 'tabla') { const dd=document.getElementById('filterProjDropdown'); if(dd) dd.style.display='none'; }
   if(view !== 'tabla') { bulkSelected.clear(); const bar=document.getElementById('bulkActionBar'); if(bar) bar.style.display='none'; }
   document.getElementById('addBtns').style.display = (canEdit && ['tabla','kanban'].includes(view)) ? 'flex' : 'none';
@@ -2311,11 +2332,94 @@ function deleteNode(id) {
       ? 'Solo un administrador puede eliminar un proyecto completo'
       : 'Solo puedes eliminar elementos donde participas', 'error');
   }
-  if(confirm('¿Eliminar este elemento y todo su contenido?')){
+  if(confirm('¿Eliminar este elemento y todo su contenido? Podrás restaurarlo desde la Papelera durante 30 días.')){
     if(n) addAudit('delete', `Eliminó ${typeLabel(n.type).toLowerCase()} "${n.name}"`);
+    // PARCHE (papelera): antes de quitarlo del árbol, se guarda una copia
+    // completa (con todos sus hijos) más su ubicación original, para poder
+    // restaurarlo tal cual estaba.
+    const parent = findParentOfNode(id);
+    const siblings = parent ? parent.children : data;
+    const originalIndex = siblings.findIndex(s=>s.id===id);
+    trash.push({
+      node: JSON.parse(JSON.stringify(n)),
+      parentId: parent ? parent.id : null,
+      originalIndex,
+      deletedAt: new Date().toISOString(),
+      deletedBy: currentUser
+    });
+    if(trash.length > 200) trash = trash.slice(-200); // límite razonable
     removeNode(id,data); saveData(); renderAll();
   }
 }
+
+// PARCHE (papelera): elementos de más de 30 días se olvidan solos, para que
+// la lista no crezca indefinidamente. Se aplica cada vez que se abre la
+// Papelera; si purga algo, guarda el cambio.
+function purgeOldTrash() {
+  const cutoff = Date.now() - 30*24*3600*1000;
+  const before = trash.length;
+  trash = trash.filter(t => new Date(t.deletedAt).getTime() >= cutoff);
+  if(trash.length !== before) saveData();
+}
+
+function getVisibleTrash() {
+  purgeOldTrash();
+  return isAdmin ? trash : trash.filter(t=>t.deletedBy===currentUser);
+}
+
+window.restoreFromTrash = function(index) {
+  const entry = trash[index];
+  if(!entry) return;
+  const { node, parentId, originalIndex } = entry;
+  if(parentId) {
+    const parent = findNode(parentId);
+    if(!parent) return showToast('El elemento donde estaba no existe más; no se puede restaurar ahí.', 'error');
+    if(!parent.children) parent.children = [];
+    const idx = Math.min(Math.max(0, originalIndex), parent.children.length);
+    parent.children.splice(idx, 0, node);
+  } else {
+    const idx = Math.min(Math.max(0, originalIndex), data.length);
+    data.splice(idx, 0, node);
+  }
+  trash.splice(index, 1);
+  addAudit('restore', `Restauró ${typeLabel(node.type).toLowerCase()} "${node.name}" desde la papelera`);
+  saveData();
+  renderAll();
+  openTrashModal();
+  showToast('Elemento restaurado', 'success');
+};
+
+window.deleteFromTrashForever = function(index) {
+  const entry = trash[index];
+  if(!entry) return;
+  if(!isAdmin && entry.deletedBy !== currentUser) return showToast('No puedes eliminar esto definitivamente', 'error');
+  if(!confirm(`¿Eliminar "${entry.node.name}" definitivamente? Esto no se puede deshacer.`)) return;
+  trash.splice(index, 1);
+  saveData();
+  openTrashModal();
+};
+
+window.openTrashModal = function() {
+  const items = getVisibleTrash();
+  const rows = items.map((t,i) => {
+    const days = Math.max(0, 30 - Math.floor((Date.now()-new Date(t.deletedAt).getTime())/(24*3600*1000)));
+    return `<div class="checkbox-item" style="justify-content:space-between">
+      <div>
+        ${typeBadge(t.node.type)} <strong>${esc(t.node.name)}</strong>
+        <div style="font-size:11px;color:var(--text3)">Eliminado por ${esc(t.deletedBy||'—')} el ${formatDate(t.deletedAt.slice(0,10))} · se borra solo en ${days} día${days!==1?'s':''}</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-primary btn-sm" onclick="restoreFromTrash(${i})"><i class="fas fa-undo"></i> Restaurar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteFromTrashForever(${i})"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+  showModal(`
+    <h3><i class="fas fa-trash-restore"></i> Papelera</h3>
+    <p style="font-size:12.5px;color:var(--text3);margin-bottom:12px">Los elementos eliminados quedan aquí 30 días antes de borrarse para siempre.${!isAdmin?' Solo ves lo que tú eliminaste.':''}</p>
+    <div class="checkbox-list" style="max-height:360px">${rows || '<div class="empty" style="padding:20px">La papelera está vacía.</div>'}</div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>`);
+};
 function toggleCollapse(id) { collapsed[id]=!collapsed[id]; renderAll(); }
 
 // ── FILTROS ───────────────────────────────────────────────────────────
@@ -2458,6 +2562,7 @@ function renderTabla() {
     const stillVisible = proj && (isAdmin || visible.some(p=>p.id===proj.id));
     if(proj && stillVisible) { renderTablaDetail(proj); return; }
     tablaSelectedProject = null; // ya no existe o dejó de ser visible
+    try { localStorage.removeItem('emtp_lastProject'); } catch(e){}
   }
   renderTablaGrid();
 }
@@ -2470,8 +2575,12 @@ function updateTablaSubToolbar() {
   // la navegación de tarjetas → clic; ya no aplica en ningún submodo de Tabla.
   const projWrap = document.getElementById('filterProjWrap');
   const typeSel = document.getElementById('filterType');
+  const ejeSel = document.getElementById('filterEje');
   if(projWrap) projWrap.style.display = 'none';
   if(typeSel) typeSel.style.display = inDetail ? '' : 'none';
+  // El filtro de Eje solo tiene sentido en la grilla (cada tarjeta ES un
+  // proyecto); dentro del detalle de uno solo, ya sabemos cuál es su eje.
+  if(ejeSel) ejeSel.style.display = inDetail ? 'none' : '';
   // El filtro de persona ahora aplica en ambos niveles: en la grilla filtra
   // qué proyectos mostrar (participación en cualquier nivel); en el detalle
   // sigue acotado a las personas de ese proyecto puntual.
@@ -2492,10 +2601,12 @@ function renderTablaGrid() {
       allPeople.map(p=>`<option value="${esc(p)}"${selectedPerson===p?' selected':''}>${esc(p)}</option>`).join('');
   }
   const personFilter = personSel?.value || '';
+  const ejeFilter = document.getElementById('filterEje')?.value || '';
 
   const projs = vd
     .filter(p => nodeMatchesFilter(p,f) || hasFilteredDescendant(p,f))
     .filter(p => !personFilter || getAllNodes([p]).some(c=>(c.responsibles||[]).includes(personFilter)||(c.support||[]).includes(personFilter)))
+    .filter(p => !ejeFilter || p.eje === ejeFilter)
     .sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
 
   const cards = projs.map(p => {
@@ -2620,6 +2731,7 @@ function renderTablaDetail(proj) {
       ${proj.eje?ejeBadgeHTML(proj.eje):''}
       <span style="font-weight:700;font-size:15px">${esc(proj.name)}</span>
       <span style="font-size:11px;color:var(--text3)">${formatDate(cd.start)} → ${formatDate(cd.end)}</span>
+      ${isAdmin?`<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openProjectHistorial('${proj.id}')"><i class="fas fa-history"></i> Historial de este proyecto</button>`:''}
     </div>
     <div style="overflow-x:auto"><table class="tree-table">
     <thead><tr><th style="width:32px"></th><th style="min-width:320px">Nombre</th><th>Inicio</th><th>Término</th><th>Horas</th><th style="min-width:140px">Personas</th><th>Estado</th><th>Avance</th><th>Dependencias</th><th><i class="fas fa-paperclip"></i></th><th></th></tr></thead>
@@ -2673,10 +2785,16 @@ let tablaFilterAll = true;
 // PARCHE: la vista Tabla ahora tiene dos niveles — una grilla de proyectos
 // (por defecto) y, al hacer clic en uno, el desglose completo de ese
 // proyecto (lo que antes era toda la vista Tabla). null = grilla.
-let tablaSelectedProject = null;
-window.openProjectDetail = function(id) { tablaSelectedProject = id; renderAll(); };
+// Se recuerda incluso si cierras el navegador y vuelves más tarde.
+let tablaSelectedProject = localStorage.getItem('emtp_lastProject') || null;
+window.openProjectDetail = function(id) {
+  tablaSelectedProject = id;
+  try { localStorage.setItem('emtp_lastProject', id); } catch(e){}
+  renderAll();
+};
 window.closeProjectDetail = function() {
   tablaSelectedProject = null;
+  try { localStorage.removeItem('emtp_lastProject'); } catch(e){}
   bulkSelected.clear();
   const bar = document.getElementById('bulkActionBar');
   if(bar) bar.style.display = 'none';
@@ -3052,11 +3170,22 @@ function getTeamForResp(resp) {
 }
 
 function renderEquipo() {
+  window.goToWorkloadAnalysis = function() {
+    const tab = document.querySelector('.tab[data-view="reportes"]');
+    if(tab) switchView('reportes', tab);
+    setTimeout(()=>{
+      const el = document.getElementById('workloadSection');
+      if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+    }, 80);
+  };
   const members = getTeamMembers();
   const all = getAllNodes(data);
-  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:16px;font-weight:600">Directorio del Equipo <span style="font-size:13px;color:var(--text3);font-weight:400">(${members.length} personas)</span></h2>
-    ${canEdit?`<button class="btn btn-primary" onclick="openAddResponsableModal()"><i class="fas fa-user-plus"></i> Añadir Persona</button>`:''}
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="goToWorkloadAnalysis()"><i class="fas fa-weight-hanging"></i> Ver carga laboral</button>
+      ${canEdit?`<button class="btn btn-primary" onclick="openAddResponsableModal()"><i class="fas fa-user-plus"></i> Añadir Persona</button>`:''}
+    </div>
   </div>`;
 
   if(!members.length) {
@@ -3292,7 +3421,7 @@ function renderReportes() {
         </div>
       </div>
     </div>
-    <div style="margin-top:16px" class="report-card">
+    <div style="margin-top:16px" class="report-card" id="workloadSection">
       <h4><i class="fas fa-weight-hanging"></i> Análisis de Carga Laboral</h4>
       <p style="font-size:11.5px;color:var(--text3);margin:-4px 0 12px">Considera todos los proyectos visibles para ti, sin importar el filtro de proyecto de arriba — para detectar sobrecarga hay que ver la carga completa de cada persona, no solo dentro de un proyecto.</p>
       ${renderWorkloadTable(vd)}
@@ -3379,6 +3508,37 @@ function getNodeFiles(id) {
   inMemory.forEach(f => { if(!merged.find(x=>x.url===f.url)) merged.push(f); });
   return merged;
 }
+
+// PARCHE (historial por proyecto): el registro de auditoría es una lista
+// plana de texto ("Eliminó tarea 'X'"), no guarda a qué proyecto pertenecía
+// cada cambio. Como aproximación razonable sin tener que tocar los ~12
+// lugares donde se genera cada entrada, se filtra por coincidencia del
+// nombre del proyecto o de cualquiera de sus elementos actuales entre
+// comillas dentro del texto — funciona bien salvo que el elemento haya sido
+// renombrado después del cambio registrado.
+function getProjectHistorial(projectId) {
+  const proj = findNode(projectId) || (trash.find(t=>t.node.id===projectId)||{}).node;
+  if(!proj) return [];
+  const names = [...new Set([proj.name, ...getAllNodes([proj]).map(n=>n.name)])].filter(Boolean);
+  return (auditLog||[]).filter(e => e.detail && names.some(name => e.detail.includes(`"${name}"`)));
+}
+window.openProjectHistorial = function(projectId) {
+  const proj = findNode(projectId); if(!proj) return;
+  const entries = getProjectHistorial(projectId).slice().reverse();
+  const actionIcons = { status:'fa-flag', date:'fa-calendar-alt', move:'fa-arrows-alt', create:'fa-plus-circle', delete:'fa-trash', restore:'fa-undo' };
+  const rows = entries.length ? entries.map(e=>`
+    <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border)">
+      <i class="fas ${actionIcons[e.action]||'fa-circle'}" style="color:var(--accent);font-size:12px;margin-top:2px;flex-shrink:0;width:16px;text-align:center"></i>
+      <span style="color:var(--text3);white-space:nowrap;flex-shrink:0;font-size:12px">${new Date(e.date).toLocaleString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+      <span style="color:var(--accent);font-weight:600;flex-shrink:0;font-size:12px">${esc(e.user)}</span>
+      <span style="color:var(--text2);font-size:12.5px">${esc(e.detail)}</span>
+    </div>`).join('') : '<div class="empty" style="padding:24px">Sin cambios registrados para este proyecto todavía.</div>';
+  showModal(`
+    <h3><i class="fas fa-history"></i> Historial de: <span style="font-size:14px;font-weight:400;color:var(--text2)">${esc(proj.name)}</span></h3>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:10px">Se muestran los cambios cuyo registro menciona a este proyecto o a algún elemento que contiene actualmente. Si algo fue renombrado después del cambio, puede no aparecer aquí.</p>
+    <div style="max-height:50vh;overflow-y:auto">${rows}</div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>`);
+};
 
 function getProjectForNode(id) {
   let n = findNode(id);
@@ -4254,6 +4414,7 @@ document.getElementById('loginScreen').style.display='flex';
     if(saved.data)  data  = saved.data;
     if(saved.users) users = saved.users;
     if(saved.teams) teams = saved.teams;
+    if(saved.trash) trash = saved.trash;
     const userObj = users[currentUser];
     currentRole = userObj ? normalizeRole(userObj.role) : 'viewer';
     isAdmin  = currentRole === 'admin';
@@ -4267,9 +4428,10 @@ document.getElementById('loginScreen').style.display='flex';
         if(result.payload.data)  data  = result.payload.data;
         if(result.payload.users) users = result.payload.users;
         if(result.payload.teams) teams = result.payload.teams;
+        if(result.payload.trash) trash = result.payload.trash;
         if(result.payload.auditLog) auditLog = result.payload.auditLog;
         _lastKnownModified = result.payload.lastModified || 0;
-        try { localStorage.setItem('emtp_session', JSON.stringify({ user:saved.user, pass:saved.pass, data, users, teams, savedAt:saved.savedAt })); } catch(e){}
+        try { localStorage.setItem('emtp_session', JSON.stringify({ user:saved.user, pass:saved.pass, data, users, teams, trash, savedAt:saved.savedAt })); } catch(e){}
         renderAll();
       }).catch(()=>{}); // si no hay red, seguimos con los datos en caché
   } catch(e){}
