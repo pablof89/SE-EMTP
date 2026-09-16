@@ -1700,7 +1700,14 @@ function iniciarApp() {
 // ('load'), evitando transferir y comparar todo data/users/teams en cada
 // ciclo (antes: JSON.stringify completo cada 30s + heartbeat aparte cada 20s).
 let _syncTimer = null;
-const SYNC_INTERVAL = 20000; // 20 segundos
+const SYNC_INTERVAL = 120000; // 120 segundos (antes 20s — ver PARCHE de rendimiento más abajo)
+// PARCHE (rendimiento): cada "heartbeat" obliga al servidor a leer y convertir
+// a JSON el archivo completo de la base de datos en Drive, sin importar que
+// sea una consulta liviana. Con el tablero creciendo (más proyectos, más
+// historial, la papelera), eso puede toparse con los límites de uso de Drive
+// si hay varias personas conectadas al mismo tiempo. Ampliar el intervalo
+// reduce esa carga a una fracción, a costa de que "quién está conectado" y
+// la detección de cambios de otros tarden un poco más en reflejarse.
 let _lastKnownModified = 0;
 
 async function syncTick() {
