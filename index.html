@@ -489,6 +489,10 @@ tr:hover .row-add-btns{opacity:1}
         <option value="">Todos los ejes</option>
         <option>Aprendizajes</option><option>Gobernanza</option><option>Normativa</option><option>Valoración TP</option>
       </select>
+      <select class="filter-select" id="filterFase" style="display:none" onchange="renderTabla()">
+        <option value="">Todas las fases</option>
+        <option>Fase 1</option><option>Fase 2</option><option>Fase 3</option>
+      </select>
       <div id="filterProjWrap" style="position: relative;">
         <button id="filterProjBtn" class="filter-select" style="cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap" onclick="toggleProjFilter(event)">
           <i class="fas fa-filter" style="font-size:10px"></i>
@@ -1255,7 +1259,6 @@ tr:hover .row-add-btns{opacity:1}
   <div id="viewHistorial" class="panel" style="display:none"></div>
 </div>
 </div>
-<button id="aiFab" onclick="openAIAssistant()" title="Asistente IA del tablero" style="display:none;position:fixed;right:22px;bottom:22px;z-index:150;width:52px;height:52px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:20px;cursor:pointer;box-shadow:0 4px 18px rgba(23,69,130,.35)"><i class="fas fa-robot"></i></button>
 <div id="modalContainer"></div>
 <div id="bulkActionBar" style="display:none;position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:10px 14px;z-index:900;align-items:center;gap:10px"></div>
 
@@ -1329,6 +1332,15 @@ const OBJETIVOS_ESPECIFICOS = [
   { n:5, eje:'Valoración TP', texto:'Presentar y promover en la sociedad el valor que genera el sistema EMTP.' },
   { n:6, eje:'Valoración TP', texto:'Cambiar positivamente las percepciones y creencias, sobre cada actor y sobre el sistema, que son claves para el propósito de la EMTP.' },
 ];
+// Fase del Plan a la que se asocia cada proyecto.
+const FASES = ['Fase 1', 'Fase 2', 'Fase 3'];
+function faseOptionsHTML(selected) {
+  return `<option value="">(Sin definir)</option>` + FASES.map(f=>`<option value="${f}" ${selected===f?'selected':''}>${f}</option>`).join('');
+}
+function faseBadgeHTML(fase) {
+  if(!fase) return '';
+  return `<span class="badge" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border)">${esc(fase)}</span>`;
+}
 function ejeColorVar(eje) { const e = EJES.find(x=>x.id===eje); return e ? `var(${e.color})` : 'var(--text3)'; }
 function ejeBgVar(eje) { const e = EJES.find(x=>x.id===eje); return e ? `var(${e.bg})` : 'var(--surface2)'; }
 function ejeBadgeHTML(eje) {
@@ -1667,8 +1679,6 @@ function iniciarApp() {
   document.getElementById('btnAdminUsers').style.display = isAdmin ? 'inline-flex' : 'none';
   const trashBtn = document.getElementById('btnTrash');
   if(trashBtn) trashBtn.style.display = canEdit ? 'inline-flex' : 'none';
-  const aiFab = document.getElementById('aiFab');
-  if(aiFab) aiFab.style.display = 'block'; // cualquier usuario con sesión puede consultar sobre lo que ve
   // PARCHE: solo administradores pueden crear proyectos nuevos.
   const cpBtn = document.getElementById('createProyectoBtn');
   if(cpBtn) cpBtn.style.display = isAdmin ? 'flex' : 'none';
@@ -1863,7 +1873,6 @@ function logout() {
   // Al cerrar sesión borramos la sesión guardada: la próxima carga sí pedirá login.
   try { localStorage.removeItem('emtp_session'); } catch(e){}
   currentUser=null; currentPass=null; isAdmin=false; canEdit=false; currentRole='viewer';
-  aiHistory = []; const fab = document.getElementById('aiFab'); if(fab) fab.style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('mainApp').style.display='none';
   document.getElementById('loginUser').value='';
@@ -2296,6 +2305,7 @@ function switchView(view, btn) {
   document.getElementById('filterProjWrap').style.display = view === 'tabla' ? '' : 'none';
   document.getElementById('filterPerson').style.display = view === 'tabla' ? '' : 'none';
   document.getElementById('filterEje').style.display = view === 'tabla' ? '' : 'none';
+  document.getElementById('filterFase').style.display = view === 'tabla' ? '' : 'none';
   if(view !== 'tabla') { const dd=document.getElementById('filterProjDropdown'); if(dd) dd.style.display='none'; }
   if(view !== 'tabla') { bulkSelected.clear(); const bar=document.getElementById('bulkActionBar'); if(bar) bar.style.display='none'; }
   document.getElementById('addBtns').style.display = (canEdit && ['tabla','kanban'].includes(view)) ? 'flex' : 'none';
@@ -2591,11 +2601,13 @@ function updateTablaSubToolbar() {
   const projWrap = document.getElementById('filterProjWrap');
   const typeSel = document.getElementById('filterType');
   const ejeSel = document.getElementById('filterEje');
+  const faseSel = document.getElementById('filterFase');
   if(projWrap) projWrap.style.display = 'none';
   if(typeSel) typeSel.style.display = inDetail ? '' : 'none';
-  // El filtro de Eje solo tiene sentido en la grilla (cada tarjeta ES un
-  // proyecto); dentro del detalle de uno solo, ya sabemos cuál es su eje.
+  // El filtro de Eje y Fase solo tiene sentido en la grilla (cada tarjeta ES
+  // un proyecto); dentro del detalle de uno solo, ya sabemos cuáles son.
   if(ejeSel) ejeSel.style.display = inDetail ? 'none' : '';
+  if(faseSel) faseSel.style.display = inDetail ? 'none' : '';
   // El filtro de persona ahora aplica en ambos niveles: en la grilla filtra
   // qué proyectos mostrar (participación en cualquier nivel); en el detalle
   // sigue acotado a las personas de ese proyecto puntual.
@@ -2617,11 +2629,13 @@ function renderTablaGrid() {
   }
   const personFilter = personSel?.value || '';
   const ejeFilter = document.getElementById('filterEje')?.value || '';
+  const faseFilter = document.getElementById('filterFase')?.value || '';
 
   const projs = vd
     .filter(p => nodeMatchesFilter(p,f) || hasFilteredDescendant(p,f))
     .filter(p => !personFilter || getAllNodes([p]).some(c=>(c.responsibles||[]).includes(personFilter)||(c.support||[]).includes(personFilter)))
     .filter(p => !ejeFilter || p.eje === ejeFilter)
+    .filter(p => !faseFilter || p.fase === faseFilter)
     .sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
 
   const cards = projs.map(p => {
@@ -2644,7 +2658,7 @@ function renderTablaGrid() {
       </div>
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
         <div style="display:flex;flex-direction:column;gap:5px;min-width:0;padding-right:${(canEditProj||canDeleteProj)?'60px':'0'}">
-          ${p.eje?ejeBadgeHTML(p.eje):''}
+          <div style="display:flex;gap:5px;flex-wrap:wrap">${p.eje?ejeBadgeHTML(p.eje):''}${p.fase?faseBadgeHTML(p.fase):''}</div>
           <div style="font-weight:700;font-size:15px;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(p.name)}</div>
         </div>
         ${ovKids>0?`<span class="alert-badge" style="flex-shrink:0">${ovKids}</span>`:''}
@@ -3746,113 +3760,6 @@ window.openReportForPrint = function() {
   closeModal();
 };
 
-// ════════════════════════════════════════════════════════════════════════
-// MEJORA #3 — ASISTENTE IA
-// El navegador arma un resumen compacto y legible de los proyectos que la
-// persona puede ver, y lo manda junto con la pregunta al backend, que es
-// quien llama a la API (la clave nunca está en el navegador).
-// ════════════════════════════════════════════════════════════════════════
-const AI_QUICK_PROMPTS = [
-  { label:'Resumen general', text:'Dame un resumen ejecutivo del estado general del tablero en 5 viñetas.' },
-  { label:'Riesgos esta semana', text:'¿Qué tareas o proyectos están en riesgo o vencidos esta semana? Ordénalos por urgencia y sugiere una acción para cada uno.' },
-  { label:'Carga del equipo', text:'¿Quiénes del equipo están más cargados y quiénes tienen disponibilidad? Basa la respuesta en las tareas y horas asignadas.' },
-  { label:'Párrafo para informe', text:'Redacta un párrafo formal, en lenguaje institucional, que resuma el avance del Plan por Eje para incluir en un informe de gestión.' },
-  { label:'Objetivos sin cobertura', text:'¿Qué objetivos específicos del Plan no tienen proyectos asociados o tienen avance muy bajo? ¿Qué implica eso?' },
-];
-let aiHistory = []; // {role:'user'|'assistant', text}
-
-function buildAIContext() {
-  const vd = getVisibleData().filter(n=>n.type==='proyecto');
-  const hoy = today();
-  let out = `FECHA DE HOY: ${formatDate(hoy)}\nPROYECTOS VISIBLES: ${vd.length}\n\n`;
-  vd.forEach(p => {
-    const kids = getAllNodes([p]).filter(c=>c.id!==p.id);
-    const tasks = kids.filter(c=>c.type==='tarea');
-    const pr = projectProgress(p);
-    const cd = computedDates(p);
-    const obj = OBJETIVOS_ESPECIFICOS.find(o=>String(o.n)===String(p.objetivoEspecifico));
-    out += `## PROYECTO: ${p.name}\n`;
-    out += `Eje: ${p.eje||'sin asignar'} | Objetivo específico: ${obj?'OE'+obj.n+' ('+obj.texto.slice(0,50)+'…)':'sin asignar'}\n`;
-    out += `Estado: ${p.status||'Pendiente'} | Avance: ${pr!==null?pr+'%':'sin tareas'} | Período: ${formatDate(cd.start)} a ${formatDate(cd.end)}\n`;
-    out += `Responsables: ${(p.responsibles||[]).join(', ')||'ninguno'} | Apoyo: ${(p.support||[]).join(', ')||'ninguno'}\n`;
-    if(p.objetivo) out += `Objetivo del proyecto: ${p.objetivo.slice(0,220)}\n`;
-    kids.filter(c=>c.type==='actividad').forEach(a => {
-      const at = (a.children||[]).filter(c=>c.type==='tarea');
-      out += `  - Actividad: ${a.name} [${a.status||'Pendiente'}] (${at.filter(t=>t.status==='Completado').length}/${at.length} tareas)\n`;
-      at.forEach(t => {
-        const tcd = computedDates(t);
-        const flags = [isOverdue(t)?'VENCIDA':'', isDueSoon(t)?'vence pronto':'', isBlocked(t)?'bloqueada por dependencia':''].filter(Boolean).join(', ');
-        out += `      · ${t.name} [${t.status||'Pendiente'}] ${formatDate(tcd.start)}→${formatDate(tcd.end)} ${t.hours||0}h resp: ${(t.responsibles||[]).join('/')||'—'}${flags?' ⚠ '+flags:''}\n`;
-      });
-    });
-    // tareas sueltas directamente bajo el proyecto
-    (p.children||[]).filter(c=>c.type==='tarea').forEach(t => {
-      const tcd = computedDates(t);
-      const flags = [isOverdue(t)?'VENCIDA':'', isDueSoon(t)?'vence pronto':''].filter(Boolean).join(', ');
-      out += `  · Tarea: ${t.name} [${t.status||'Pendiente'}] ${formatDate(tcd.start)}→${formatDate(tcd.end)} ${t.hours||0}h resp: ${(t.responsibles||[]).join('/')||'—'}${flags?' ⚠ '+flags:''}\n`;
-    });
-    out += '\n';
-  });
-  // Carga laboral resumida
-  const people = [...new Set(getAllNodes(vd).flatMap(n=>[...(n.responsibles||[]),...(n.support||[])]))];
-  if(people.length) {
-    out += `## CARGA LABORAL (horas/semana promedio, criterio: 42h o más = sin disponibilidad)\n`;
-    people.map(p=>calcPersonWorkload(p, vd)).sort((a,b)=>b.weeklyAvg-a.weeklyAvg).forEach(w => {
-      out += `- ${w.name}: ${w.taskCount} tareas, ${w.totalHours}h totales, ${w.weeklyAvg}h/sem, hasta ${w.maxParallel} en paralelo → ${workloadLevel(w.weeklyAvg).label}\n`;
-    });
-  }
-  return out.length > 44000 ? out.slice(0, 44000) + '\n[…datos truncados por tamaño]' : out;
-}
-
-window.openAIAssistant = function() {
-  const historyHtml = aiHistory.length ? aiHistory.map(m => `
-    <div style="display:flex;gap:8px;margin-bottom:10px;${m.role==='user'?'justify-content:flex-end':''}">
-      <div style="max-width:88%;padding:9px 12px;border-radius:var(--radius-lg);font-size:13px;line-height:1.5;white-space:pre-wrap;${m.role==='user'?'background:var(--accent);color:#fff':'background:var(--surface2);color:var(--text)'}">${esc(m.text)}</div>
-    </div>`).join('') : `<div style="font-size:12.5px;color:var(--text3);text-align:center;padding:18px 8px">Pregunta lo que quieras sobre el estado del tablero, o usa uno de los atajos de abajo. Trabajo solo con los datos que puedes ver.</div>`;
-  showModal(`
-    <h3><i class="fas fa-robot"></i> Asistente del tablero</h3>
-    <div id="aiHistory" style="max-height:44vh;overflow-y:auto;margin-bottom:10px;padding:4px">${historyHtml}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
-      ${AI_QUICK_PROMPTS.map((q,i)=>`<button class="btn btn-ghost btn-sm" onclick="askAI(AI_QUICK_PROMPTS[${i}].text)">${q.label}</button>`).join('')}
-    </div>
-    <div style="display:flex;gap:6px">
-      <input id="aiQuestion" class="editable" style="flex:1;border:1px solid var(--border);padding:8px 10px;font-size:13px" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter'){event.preventDefault();askAI(this.value);}">
-      <button class="btn btn-primary" onclick="askAI(document.getElementById('aiQuestion').value)"><i class="fas fa-paper-plane"></i></button>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-      <span style="font-size:10.5px;color:var(--text3)">Respuestas generadas por IA — verifica antes de usar en documentos oficiales.</span>
-      ${aiHistory.length?`<button class="btn btn-ghost btn-sm" onclick="aiHistory=[];openAIAssistant()">Limpiar</button>`:''}
-    </div>`);
-  const hist = document.getElementById('aiHistory'); if(hist) hist.scrollTop = hist.scrollHeight;
-  const inp = document.getElementById('aiQuestion'); if(inp) inp.focus();
-};
-
-window.askAI = async function(question) {
-  question = String(question||'').trim();
-  if(!question) return;
-  aiHistory.push({ role:'user', text:question });
-  aiHistory.push({ role:'assistant', text:'Pensando…' });
-  openAIAssistant();
-  try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'askAI', user:currentUser, pass:currentPass, question, context:buildAIContext() })
-    });
-    const result = await res.json();
-    aiHistory.pop();
-    if(result.status==='success') {
-      aiHistory.push({ role:'assistant', text: result.answer || '(sin respuesta)' });
-      addAudit('ai', `Consultó al asistente: "${question.slice(0,60)}${question.length>60?'…':''}"`);
-    } else {
-      aiHistory.push({ role:'assistant', text: '⚠ ' + (result.message || 'No se pudo obtener respuesta.') });
-    }
-  } catch(e) {
-    aiHistory.pop();
-    aiHistory.push({ role:'assistant', text: '⚠ Error de conexión con el asistente. Intenta nuevamente.' });
-  }
-  openAIAssistant();
-};
-
 function renderHistorial() {
   if(!isAdmin) return;
   const entries = (auditLog||[]).slice().reverse();
@@ -4417,6 +4324,7 @@ function openAddModal(type) {
     ${type==='proyecto'?`<div class="form-grid">
       <div class="form-row"><label>Eje</label><select id="m-eje" onchange="onEjeChange()">${ejeOptionsHTML('')}</select></div>
       <div class="form-row"><label>Objetivo específico</label><select id="m-objetivo-esp">${objetivoOptionsHTML('', null)}</select></div>
+      <div class="form-row"><label>Fase del Plan</label><select id="m-fase">${faseOptionsHTML('')}</select></div>
     </div>
     <div class="form-row"><label>Objetivo del proyecto</label><textarea id="m-objetivo" placeholder="Describe el objetivo de este proyecto"></textarea></div>`:''}
     <div class="form-grid">
@@ -4463,6 +4371,7 @@ function addNode(type) {
     objetivo:(document.getElementById('m-objetivo')?.value||'').trim(),
     eje:(document.getElementById('m-eje')?.value||''),
     objetivoEspecifico:(document.getElementById('m-objetivo-esp')?.value||''),
+    fase:(document.getElementById('m-fase')?.value||''),
     status:'Pendiente', notes:'', deps:[], children:[],
     createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()
   };
@@ -4507,6 +4416,7 @@ window.openEditModal = function(id) {
     ${n.type==='proyecto'?`<div class="form-grid">
       <div class="form-row"><label>Eje</label><select id="m-eje" onchange="onEjeChange()" ${readOnly?'disabled':''}>${ejeOptionsHTML(n.eje||'')}</select></div>
       <div class="form-row"><label>Objetivo específico</label><select id="m-objetivo-esp" ${readOnly?'disabled':''}>${objetivoOptionsHTML(n.objetivoEspecifico||'', n.eje||null)}</select></div>
+      <div class="form-row"><label>Fase del Plan</label><select id="m-fase" ${readOnly?'disabled':''}>${faseOptionsHTML(n.fase||'')}</select></div>
     </div>
     <div class="form-row"><label>Objetivo del proyecto</label><textarea id="m-objetivo" placeholder="Describe el objetivo de este proyecto" ${readOnly?'readonly':''}>${esc(n.objetivo||'')}</textarea></div>`:''}
     <div class="form-row"><label>Notas</label><textarea id="m-notes" ${readOnly?'readonly':''}>${esc(n.notes||'')}</textarea></div>
@@ -4535,6 +4445,8 @@ window.saveEdit = function(id) {
   if(ejeEl) n.eje = ejeEl.value;
   const objEspEl = document.getElementById('m-objetivo-esp');
   if(objEspEl) n.objetivoEspecifico = objEspEl.value;
+  const faseEl = document.getElementById('m-fase');
+  if(faseEl) n.fase = faseEl.value;
   if(!hasChildren) {
     const r = validateDates(
       document.getElementById('m-start').value,
