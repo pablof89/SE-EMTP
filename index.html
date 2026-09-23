@@ -2936,7 +2936,7 @@ function renderGantt() {
   // juntos resultaba poco eficiente y confuso. Sin proyecto elegido, se
   // muestra un selector en vez de renderizar cualquier gráfico.
   const vd = getVisibleData();
-  const ganttProjectsList = vd.filter(n=>n.type==='proyecto');
+  const ganttProjectsList = vd.filter(n=>n.type==='proyecto').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
   if(!ganttProjectFilter || !ganttProjectsList.some(p=>p.id===ganttProjectFilter)) {
     const opts = ganttProjectsList.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
     document.getElementById('viewGantt').innerHTML = `
@@ -2993,9 +2993,26 @@ function renderGantt() {
     while(d <= rawMax) { units.push(new Date(d)); d.setMonth(d.getMonth()+1); }
   }
 
-  const totalMs = rawMax - minDate;
   const CELL_W  = ganttScale==='dia' ? 38 : ganttScale==='semana' ? 80 : 108;
   const totalW  = units.length * CELL_W;
+
+  // PARCHE (alineación): el encabezado dibuja cada unidad (día/semana/mes)
+  // con un ancho de columna FIJO (CELL_W), pero los meses no duran lo mismo
+  // entre sí (28 a 31 días). Si las barras se ubican con una regla de tres
+  // simple sobre el tiempo real transcurrido, se van desalineando cada vez
+  // más respecto a las columnas del encabezado a medida que se avanza en el
+  // calendario. Esta función ubica cada fecha según en qué columna cae y
+  // qué proporción de ESA columna ocupa — así ambas cosas usan exactamente
+  // el mismo sistema de referencia.
+  function dateToPx(d) {
+    let idx = 0;
+    for(let i=0;i<units.length;i++){ if(units[i] <= d) idx = i; else break; }
+    const unitStart = units[idx];
+    const unitEnd = idx+1 < units.length ? units[idx+1] : rawMax;
+    const span = unitEnd - unitStart;
+    const frac = span>0 ? (d-unitStart)/span : 0;
+    return (idx + Math.max(0,Math.min(1,frac))) * CELL_W;
+  }
 
   // Cabecera
   const headerCells = units.map(u => {
@@ -3011,7 +3028,7 @@ function renderGantt() {
 
   // Línea de hoy
   const todayDate = parseDate(today());
-  const todayPx   = ((todayDate - minDate) / totalMs) * totalW;
+  const todayPx   = dateToPx(todayDate);
   const showToday = todayDate >= minDate && todayDate <= rawMax;
   const todayLineHTML = showToday ? `<div class="gantt-today-line" style="left:${todayPx}px" title="Hoy: ${formatDate(today())}"></div>` : '';
 
@@ -3030,8 +3047,8 @@ function renderGantt() {
     if(cd.start && cd.end) {
       const sd = parseDate(cd.start), ed = parseDate(cd.end);
       if(sd && ed) {
-        const leftPx  = Math.max(0, ((sd-minDate)/totalMs)*totalW);
-        const widthPx = Math.max(4,  ((ed-sd)/totalMs)*totalW);
+        const leftPx  = Math.max(0, dateToPx(sd));
+        const widthPx = Math.max(4, dateToPx(ed) - dateToPx(sd));
         const ov    = isOverdue(n);
         const color = ov ? 'var(--danger)' : barColors[n.type]||'var(--accent)';
         const pct   = n.type!=='tarea' ? pctDone([n]) : null;
