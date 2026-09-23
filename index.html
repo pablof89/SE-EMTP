@@ -244,6 +244,15 @@ tr:hover .row-add-btns{opacity:1}
 .gantt-row-cells{flex:1;min-width:max-content;position:relative;display:flex}
 .gantt-cell{flex-shrink:0;border-right:1px solid var(--gantt-grid);height:36px;position:relative}
 .gantt-bar{position:absolute;height:18px;top:9px;border-radius:4px;display:flex;align-items:center;padding:0 7px;font-size:10px;font-weight:700;color:#fff;overflow:hidden;cursor:pointer;z-index:2;transition:filter .15s,transform .1s}
+.gantt-bar-proyecto,.gantt-bar-actividad{border-radius:3px}
+.gantt-bar-tarea{border-radius:5px;font-weight:600}
+/* PARCHE: separación visual entre proyecto/actividad/tarea en la carta Gantt */
+.gantt-row-proyecto{background:var(--proj-bg)}
+.gantt-row-proyecto .gantt-row-label{font-weight:800}
+.gantt-row-actividad{background:var(--act-bg)}
+.gantt-row-actividad .gantt-row-label{border-left:3px solid var(--act)}
+.gantt-row-tarea .gantt-row-label{border-left:3px solid transparent}
+.gantt-indent-guide{width:10px;height:100%;border-left:2px solid var(--border);margin-left:-4px;flex-shrink:0;align-self:stretch}
 .gantt-bar:hover{filter:brightness(1.1);transform:scaleY(1.07)}
 .gantt-today-line{position:absolute;top:0;bottom:0;width:2px;background:var(--gantt-today);z-index:5;pointer-events:none}
 .gantt-today-line::after{content:'';position:absolute;top:6px;left:-4px;width:10px;height:10px;background:var(--gantt-today);border-radius:50%}
@@ -2923,18 +2932,31 @@ window.bulkDeleteSelected = function() {
 };
 
 function renderGantt() {
-  // Si hay filtro de proyecto, solo mostramos ese proyecto y sus descendientes.
+  // PARCHE: la carta Gantt ahora exige elegir un solo proyecto — ver todos
+  // juntos resultaba poco eficiente y confuso. Sin proyecto elegido, se
+  // muestra un selector en vez de renderizar cualquier gráfico.
   const vd = getVisibleData();
-  const ganttData = ganttProjectFilter
-    ? vd.filter(n=>n.id===ganttProjectFilter)
-    : vd;
+  const ganttProjectsList = vd.filter(n=>n.type==='proyecto');
+  if(!ganttProjectFilter || !ganttProjectsList.some(p=>p.id===ganttProjectFilter)) {
+    const opts = ganttProjectsList.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    document.getElementById('viewGantt').innerHTML = `
+      <div class="empty" style="display:flex;flex-direction:column;align-items:center;gap:14px">
+        <i class="fas fa-calendar-alt" style="font-size:26px"></i>
+        <div>Elige un proyecto para ver su carta Gantt.</div>
+        ${ganttProjectsList.length ? `<select class="filter-select" style="font-size:13px;height:34px;min-width:260px" onchange="ganttProjectFilter=this.value;renderGantt()">
+          <option value="">Selecciona un proyecto…</option>${opts}
+        </select>` : `<div style="font-size:12.5px;color:var(--text3)">No hay proyectos disponibles.</div>`}
+      </div>`;
+    return;
+  }
+  const ganttData = vd.filter(n=>n.id===ganttProjectFilter);
   const allNodes = getAllNodes(ganttData);
   const starts = allNodes.map(n=>computedDates(n).start).filter(Boolean);
   const ends   = allNodes.map(n=>computedDates(n).end).filter(Boolean);
 
   if(!starts.length) {
     // Renderizamos igualmente la toolbar (con selector de proyecto) para no bloquear al usuario.
-    const ganttProjOptsEmpty = vd.filter(n=>n.type==='proyecto')
+    const ganttProjOptsEmpty = ganttProjectsList
       .map(p=>`<option value="${p.id}" ${ganttProjectFilter===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
     document.getElementById('viewGantt').innerHTML = `
       <div class="gantt-toolbar">
@@ -2945,7 +2967,7 @@ function renderGantt() {
         <div style="width:1px;height:18px;background:var(--border);margin:0 4px"></div>
         <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Proyecto:</span>
         <select class="filter-select" style="font-size:12px;height:28px" onchange="ganttProjectFilter=this.value;renderGantt()">
-          <option value="">Todos</option>${ganttProjOptsEmpty}
+          ${ganttProjOptsEmpty}
         </select>
       </div>
       <div class="empty"><i class="fas fa-calendar-alt"></i>No hay fechas configuradas. Define fechas de inicio y fin en los elementos.</div>`;
@@ -3017,13 +3039,25 @@ function renderGantt() {
         const respList = (n.responsibles||[]).join(', ') || '—';
         const suppList = (n.support||[]).join(', ') || '—';
         const tip = `${esc(n.name)}: ${formatDate(cd.start)} → ${formatDate(cd.end)}${pct!==null?' ('+pct+'%)':''}&#10;Responsables: ${esc(respList)}&#10;Apoyo: ${esc(suppList)}`;
-        barHTML = `<div class="gantt-bar" style="left:${leftPx}px;width:${widthPx}px;background:${color}" onclick="openEditModal('${n.id}')" title="${tip}">${progress}${esc(n.name.slice(0,22))}</div>`;
+        // PARCHE: barras más gruesas para proyecto/actividad (son "contenedores"
+        // de tiempo) y más delgadas para tarea (el elemento de trabajo real) —
+        // es una convención común de carta Gantt para distinguir jerarquía.
+        const barH = n.type==='tarea' ? 13 : n.type==='actividad' ? 17 : 20;
+        const barTop = (36 - barH) / 2;
+        barHTML = `<div class="gantt-bar gantt-bar-${n.type}" style="left:${leftPx}px;width:${widthPx}px;height:${barH}px;top:${barTop}px;background:${color}" onclick="openEditModal('${n.id}')" title="${tip}">${progress}${esc(n.name.slice(0,22))}</div>`;
       }
     }
-    return `<div class="gantt-row">
-      <div class="gantt-row-label" style="padding-left:${10+level*14}px">
+    // PARCHE: separación visual más clara entre niveles — las actividades
+    // llevan una franja de fondo tenue y su nombre en negrita, marcando
+    // visualmente dónde empieza cada "grupo" de tareas; las tareas quedan
+    // con fondo neutro y una guía vertical que las conecta a su actividad.
+    const rowClass = n.type==='actividad' ? 'gantt-row gantt-row-actividad' : n.type==='tarea' ? 'gantt-row gantt-row-tarea' : 'gantt-row gantt-row-proyecto';
+    const nameStyle = n.type==='actividad' ? 'font-weight:700' : '';
+    return `<div class="${rowClass}">
+      <div class="gantt-row-label" style="padding-left:${10+level*16}px">
+        ${level>0 && n.type==='tarea' ? `<span class="gantt-indent-guide"></span>` : ''}
         ${n.children&&n.children.length ? `<button class="toggle-btn" onclick="toggleCollapse('${n.id}')"><i class="fas fa-chevron-${collapsed[n.id]?'right':'down'}"></i></button>` : '<span class="no-toggle"></span>'}
-        ${typeBadge(n.type)}<span title="${esc(n.name)}">${esc(n.name)}</span>
+        ${typeBadge(n.type)}<span title="${esc(n.name)}" style="${nameStyle}">${esc(n.name)}</span>
       </div>
       <div class="gantt-row-cells" style="width:${totalW}px">
         ${gridLines}${todayLineHTML}${barHTML}
@@ -3040,7 +3074,7 @@ function renderGantt() {
   }
   walkNodes(ganttData, 0);
 
-  const ganttProjOpts = vd.filter(n=>n.type==='proyecto')
+  const ganttProjOpts = ganttProjectsList
     .map(p=>`<option value="${p.id}" ${ganttProjectFilter===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
 
   document.getElementById('viewGantt').innerHTML = `
@@ -3052,7 +3086,7 @@ function renderGantt() {
       <div style="width:1px;height:18px;background:var(--border);margin:0 4px"></div>
       <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Proyecto:</span>
       <select class="filter-select" style="font-size:12px;height:28px" onchange="ganttProjectFilter=this.value;renderGantt()">
-        <option value="">Todos</option>${ganttProjOpts}
+        ${ganttProjOpts}
       </select>
       <div style="flex:1"></div>
       <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:12px;height:8px;background:var(--proj);border-radius:2px;display:inline-block"></span>Proyecto</span>
