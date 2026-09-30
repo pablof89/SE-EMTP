@@ -2336,7 +2336,7 @@ function validateDates(start, end) {
 function updateField(id,field,val) {
   if(!canEdit) return showToast('No tienes permisos para editar', 'error');
   const n=findNode(id);
-  if(!canModifyNode(n)) return showToast('Solo puedes modificar elementos donde participas', 'error');
+  if(!(field==='status' ? canChangeStatus(n) : canModifyNode(n))) return showToast('Solo puedes modificar elementos donde participas', 'error');
   if(n){
     const oldVal = n[field];
     n[field]=val;
@@ -2508,6 +2508,16 @@ function canModifyNode(n) {
   if(n.type === 'tarea') return userParticipates(n);
   if(n.type === 'actividad') return userParticipates(n) || (n.children||[]).some(userParticipates);
   return false;
+}
+// Cambio de ESTADO de una tarea: además de quien participa en la tarea, lo puede
+// cambiar cualquier editor que participe en algún nodo del mismo proyecto.
+// El resto de los campos sigue regido por canModifyNode.
+function canChangeStatus(n) {
+  if(!n) return false;
+  if(canModifyNode(n)) return true;
+  if(!canEdit || n.type !== 'tarea') return false;
+  const proj = data.find(p => p.type === 'proyecto' && findNode(n.id, [p]));
+  return !!proj && getAllNodes([proj]).some(userParticipates);
 }
 function canDeleteNode(n) {
   if(!n) return false;
@@ -2763,7 +2773,7 @@ function renderTablaDetail(proj) {
         <td>${inherited?`<span style="font-size:12px;color:var(--text3);font-style:italic">${formatDate(cd.end)}</span>`:`<input type="date" class="editable" value="${n.end||''}" onchange="updateField('${n.id}','end',this.value)" ${!rowEdit?'disabled':''} style="${ov?'color:var(--danger)':''}">`}</td>
         <td>${inherited?`<span style="font-size:12px;color:var(--text3)">${ch}h</span>`:`<input type="number" min="0" class="editable editable-num" value="${n.hours||0}" onchange="updateField('${n.id}','hours',+this.value)" ${!rowEdit?'disabled':''}>`}</td>
         <td style="cursor:${canEdit?'pointer':'default'}" ${canEdit?`onclick="openEditModal('${n.id}')"`:''}><div style="display:flex;flex-wrap:wrap;gap:4px">${teamHtml}</div></td>
-        <td><select class="editable" onchange="updateField('${n.id}','status',this.value)" ${!rowEdit?'disabled':''}>${['Pendiente','En curso','Completado','Bloqueado'].map(s=>`<option ${n.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+        <td><select class="editable" onchange="updateField('${n.id}','status',this.value)" ${!canChangeStatus(n)?'disabled':''}>${['Pendiente','En curso','Completado','Bloqueado'].map(s=>`<option ${n.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
         <td>${pct!==null?`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:var(--text3);min-width:28px">${pct}%</span><div class="pct-bar-wrap"><div class="pct-bar" style="width:${pct}%"></div></div></div>`:'—'}</td>
         <td><div class="dep-tags" ${rowEdit?`onclick="openDepsModal('${n.id}')"`:''}>${depNames.length?depNames.map(d=>`<span class="dep-tag" title="${d}">${d.slice(0,14)}</span>`).join(''):`<span class="dep-add">${rowEdit?'+ dep':'—'}</span>`}</div></td>
         <td><span class="file-badge" onclick="openFilesModal('${n.id}')">${getNodeFiles(n.id).length||'+'}</span></td>
@@ -3247,7 +3257,7 @@ function kanbanColDrop(e, newStatus) {
   e.currentTarget.classList.remove('drag-over-col');
   if(!kanbanDragId || !canEdit) return;
   const n = findNode(kanbanDragId);
-  if(!canModifyNode(n)) { showToast('Solo puedes mover tareas donde participas', 'error'); kanbanDragId = null; return; }
+  if(!canChangeStatus(n)) { showToast('Solo puedes mover tareas de proyectos donde participas', 'error'); kanbanDragId = null; return; }
   if(n && n.status !== newStatus) {
     const oldStatus = n.status;
     n.status = newStatus;
