@@ -242,7 +242,7 @@ tr:hover .row-add-btns{opacity:1}
 .gantt-body{display:flex;flex-direction:column}
 .gantt-row{display:flex;border-bottom:1px solid var(--border);min-height:36px;align-items:stretch}
 .gantt-row:last-child{border-bottom:none}
-.gantt-row-label{width:280px;flex-shrink:0;padding:5px 12px;border-right:1px solid var(--border);display:flex;align-items:center;gap:5px;overflow:hidden;min-height:36px}
+.gantt-row-label{width:280px;flex-shrink:0;padding:5px 12px;border-right:1px solid var(--border);display:flex;align-items:center;gap:5px;overflow:hidden;min-height:36px;position:sticky;left:0;z-index:3;background:var(--surface)}
 .gantt-row-label span{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gantt-row-cells{flex:1;min-width:max-content;position:relative;display:flex}
 .gantt-cell{flex-shrink:0;border-right:1px solid var(--gantt-grid);height:36px;position:relative}
@@ -252,9 +252,9 @@ tr:hover .row-add-btns{opacity:1}
 .gantt-hito{position:absolute;top:11px;width:14px;height:14px;transform:rotate(45deg);cursor:pointer;z-index:3;border:2px solid var(--surface);box-shadow:0 0 0 1px rgba(0,0,0,.15)}
 /* PARCHE: separación visual entre proyecto/actividad/tarea en la carta Gantt */
 .gantt-row-proyecto{background:var(--proj-bg)}
-.gantt-row-proyecto .gantt-row-label{font-weight:800}
+.gantt-row-proyecto .gantt-row-label{background:var(--proj-bg);font-weight:800}
 .gantt-row-actividad{background:var(--act-bg)}
-.gantt-row-actividad .gantt-row-label{border-left:3px solid var(--act)}
+.gantt-row-actividad .gantt-row-label{background:var(--act-bg);border-left:3px solid var(--act)}
 .gantt-row-tarea .gantt-row-label{border-left:3px solid transparent}
 .gantt-indent-guide{width:10px;height:100%;border-left:2px solid var(--border);margin-left:-4px;flex-shrink:0;align-self:stretch}
 .gantt-bar:hover{filter:brightness(1.1);transform:scaleY(1.07)}
@@ -3156,9 +3156,8 @@ function renderGantt() {
         </div>
       </div>
       <div style="display:flex">
-        <div style="width:280px;flex-shrink:0"></div>
         <div style="flex:1;overflow-x:auto" id="ganttBodyScroll" onscroll="document.getElementById('ganttHdrScroll').scrollLeft=this.scrollLeft">
-          <div style="min-width:${totalW}px">
+          <div style="min-width:${totalW+280}px">
             ${bodyRows || '<div class="empty">Sin elementos con fechas.</div>'}
           </div>
         </div>
