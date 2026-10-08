@@ -34,12 +34,28 @@
  *     proyecto puede cambiar el ESTADO de cualquier tarea o hito de ese
  *     proyecto (igual que el tablero: canChangeStatus). Ningún otro campo
  *     de un nodo ajeno se acepta — ver mergeNodeWithPermissions.
+ * 10) CONCURRENCIA: los guardados y demás escrituras se ejecutan de a uno
+ *     (LockService). Antes, dos guardados simultáneos leían la misma base y el
+ *     último pisaba al primero.
+ * 11) GUARDADO POR CAMBIOS: el tablero ahora informa qué campos modificó y qué
+ *     elementos eliminó ("hints"). El servidor solo aplica eso sobre su versión
+ *     actual, en vez de aceptar el árbol completo que tenía el navegador (que
+ *     podía estar desactualizado y borrar lo que otras personas hicieron).
+ *     Esto incluye a los administradores. Los clientes antiguos (sin "hints")
+ *     siguen funcionando como antes.
+ * 12) HISTORIAL Y PAPELERA se combinan en vez de reemplazarse.
+ * 13) RENDIMIENTO: los archivos de la base se ubican por ID (en caché) y no por
+ *     búsqueda de nombre en cada llamada.
+ * 14) "save" devuelve el estado ya fusionado, para que el navegador quede al día.
  */
 
 // ── PUNTO DE ENTRADA ────────────────────────────────────────────────────
+var WRITE_ACTIONS = ['save', 'register', 'recoverPassword', 'removeUser', 'changePassword'];
+
 function doPost(e) {
   if (!e || !e.postData) return response({ status: "error", message: "Sin datos" });
 
+  var lock = null;
   try {
     var json = JSON.parse(e.postData.contents);
     var folder = DriveApp.getFolderById("1Ja1od5-h-mPmVKmxKIu8ClvLzsTcTCl_"); // TU ID DE CARPETA
@@ -66,13 +82,25 @@ function doPost(e) {
       return response(hbResult);
     }
 
-    var dbFile = folder.getFilesByName("emtp_db.json");
+    // PARCHE (concurrencia): toda escritura espera su turno ANTES de leer la base,
+    // para que cada una parta de la versión más reciente.
+    if (WRITE_ACTIONS.indexOf(json.action) !== -1) {
+      lock = LockService.getScriptLock();
+      try {
+        lock.waitLock(30000);
+      } catch (lockErr) {
+        lock = null;
+        return response({ status: "error", retry: true, message: "El servidor está ocupado guardando otros cambios. Se reintentará automáticamente." });
+      }
+    }
+
+    var dbFile = getNamedFile(folder, "emtp_db.json");
 
     // PARCHE (3): ya no se crea un admin de fábrica con contraseña conocida.
     // Si el archivo de base de datos no existe, se detiene con un mensaje claro
     // en vez de dejar una cuenta admin/admin123 accesible para cualquiera que
     // conozca la URL pública del endpoint.
-    if (!dbFile.hasNext()) {
+    if (!dbFile) {
       return response({
         status: "error",
         message: "La base de datos no existe todavía. Un administrador debe ejecutar " +
@@ -80,7 +108,7 @@ function doPost(e) {
       });
     }
 
-    var db = JSON.parse(dbFile.next().getBlob().getDataAsString());
+    var db = JSON.parse(dbFile.getBlob().getDataAsString());
     if (!db.auditLog) db.auditLog = [];
     if (!db.lastModified) db.lastModified = 0;
     if (!db.users) db.users = {};
@@ -161,8 +189,7 @@ function doPost(e) {
 
       // Migración transparente: si la contraseña aún estaba en texto plano, se hashea ahora.
       if (!isHashed(u.password)) {
-        u.password = hashPassword(reqPass);
-        saveDb(folder, db);
+        migrateLegacyPassword(folder, reqUser, reqPass);
       }
 
       // PARCHE (1): la respuesta ya no incluye contraseñas ni datos fuera del alcance del usuario.
@@ -195,18 +222,23 @@ function doPost(e) {
       }
 
       var incomingData = (json.payload && json.payload.data) || [];
-      db.data = mergeDataWithPermissions(db.data, incomingData, reqUser, reqRole, reqDisplayName);
+      var hints = normalizeHints(json.payload && json.payload.hints);
+      db.data = mergeDataWithPermissions(db.data, incomingData, reqUser, reqRole, reqDisplayName, hints);
 
       if (json.payload && json.payload.teams) db.teams = json.payload.teams;
       // PARCHE (rendimiento): límite de respaldo en el servidor — sin
       // importar lo que mande el navegador, el historial y la papelera
       // nunca crecen sin control (eso hace cada vez más lento leer el
       // archivo completo en cada acción).
-      if (json.payload && json.payload.auditLog) db.auditLog = json.payload.auditLog.slice(-300);
+      if (json.payload && json.payload.auditLog) {
+        db.auditLog = hints ? mergeAuditLog(db.auditLog, json.payload.auditLog) : json.payload.auditLog.slice(-300);
+      }
       // PARCHE (papelera): se guarda tal cual, sin fusión node-a-node — es
       // un registro plano, no el árbol de proyectos, así que no necesita el
       // mismo cuidado de permisos que mergeDataWithPermissions.
-      if (json.payload && json.payload.trash) db.trash = json.payload.trash.slice(-200);
+      if (json.payload && json.payload.trash) {
+        db.trash = hints ? mergeTrash(db.trash, json.payload.trash, hints.trashRemoved) : json.payload.trash.slice(-200);
+      }
 
       // PARCHE (presupuesto): permisos aplicados en el servidor, no solo
       // ocultos en la pantalla — ver mergePresupuesto/mergeInformes arriba.
@@ -243,7 +275,9 @@ function doPost(e) {
 
       db.lastModified = new Date().getTime();
       saveDb(folder, db);
-      result = { status: "success", lastModified: db.lastModified };
+      // El navegador recibe el estado ya fusionado (incluye lo de otras personas y
+      // descarta lo que su rol no permite), para quedar exactamente igual al servidor.
+      result = { status: "success", lastModified: db.lastModified, payload: buildClientPayload(db, reqUser) };
     }
 
     // PARCHE: eliminar un usuario es ahora una acción explícita y propia,
@@ -293,7 +327,7 @@ function doPost(e) {
       var fileList = [];
       while (files.hasNext()) {
         var f = files.next();
-        if (f.getName() !== "emtp_db.json") fileList.push({ name: f.getName(), url: f.getUrl(), id: f.getId() });
+        if (f.getName() !== "emtp_db.json" && f.getName() !== "emtp_meta.json") fileList.push({ name: f.getName(), url: f.getUrl(), id: f.getId() });
       }
       result = { status: "success", files: fileList };
     }
@@ -316,14 +350,43 @@ function doPost(e) {
 
   } catch (err) {
     return response({ status: "error", message: err.toString() });
+  } finally {
+    if (lock) { try { lock.releaseLock(); } catch (relErr) { /* ya liberado */ } }
   }
 }
 
 // ── PERSISTENCIA ─────────────────────────────────────────────────────────
+// Ubica un archivo de la carpeta por su ID (guardado en caché 6 h). Buscarlo por
+// nombre en cada llamada es lento; si el ID en caché ya no sirve, se vuelve a buscar.
+function getNamedFile(folder, name) {
+  var cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
+  var key = 'fid_' + name;
+  if (cache) {
+    var id = cache.get(key);
+    if (id) {
+      try {
+        var cached = DriveApp.getFileById(id);
+        if (!cached.isTrashed()) return cached;
+      } catch (e) { /* ID obsoleto: se busca de nuevo */ }
+    }
+  }
+  var it = folder.getFilesByName(name);
+  if (!it.hasNext()) return null;
+  var file = it.next();
+  if (cache) { try { cache.put(key, file.getId(), 21600); } catch (e) {} }
+  return file;
+}
+
+function readDb(folder) {
+  var f = getNamedFile(folder, "emtp_db.json");
+  return f ? JSON.parse(f.getBlob().getDataAsString()) : null;
+}
+
 function saveDb(folder, dbObj) {
-  var files = folder.getFilesByName("emtp_db.json");
   var str = JSON.stringify(dbObj);
-  if (files.hasNext()) files.next().setContent(str);
+  var f = getNamedFile(folder, "emtp_db.json");
+  if (f) f.setContent(str);
   else folder.createFile("emtp_db.json", str, MimeType.PLAIN_TEXT);
   // PARCHE (rendimiento): cada vez que se guarda la base completa, se
   // actualiza también un archivo liviano aparte con solo lo que "heartbeat"
@@ -337,25 +400,40 @@ function saveDb(folder, dbObj) {
 function saveMeta(folder, dbObj) {
   var meta = { users: dbObj.users, lastModified: dbObj.lastModified };
   var str = JSON.stringify(meta);
-  var files = folder.getFilesByName("emtp_meta.json");
-  if (files.hasNext()) files.next().setContent(str);
+  var f = getNamedFile(folder, "emtp_meta.json");
+  if (f) f.setContent(str);
   else folder.createFile("emtp_meta.json", str, MimeType.PLAIN_TEXT);
 }
 
 // Lee el archivo liviano; si no existe todavía (primera vez que corre este
 // parche), lo genera una vez a partir de la base completa y sigue de ahí.
 function loadMeta(folder) {
-  var files = folder.getFilesByName("emtp_meta.json");
-  if (files.hasNext()) {
+  var f = getNamedFile(folder, "emtp_meta.json");
+  if (f) {
     try {
-      return JSON.parse(files.next().getBlob().getDataAsString());
+      return JSON.parse(f.getBlob().getDataAsString());
     } catch (e) { /* archivo corrupto o vacío: se regenera abajo */ }
   }
-  var dbFiles = folder.getFilesByName("emtp_db.json");
-  if (!dbFiles.hasNext()) return null;
-  var db = JSON.parse(dbFiles.next().getBlob().getDataAsString());
+  var db = readDb(folder);
+  if (!db) return null;
   saveMeta(folder, db);
   return { users: db.users || {}, lastModified: db.lastModified || 0 };
+}
+
+// Migración de una contraseña antigua en texto plano a hash, bajo el mismo
+// bloqueo que las demás escrituras y partiendo de la base más reciente.
+function migrateLegacyPassword(folder, user, plain) {
+  var lk = LockService.getScriptLock();
+  try { lk.waitLock(15000); } catch (e) { return; } // se migrará en el próximo ingreso
+  try {
+    var db = readDb(folder);
+    if (db && db.users && db.users[user] && !isHashed(db.users[user].password)) {
+      db.users[user].password = hashPassword(plain);
+      saveDb(folder, db);
+    }
+  } finally {
+    try { lk.releaseLock(); } catch (e) {}
+  }
 }
 
 function response(obj) {
@@ -685,50 +763,120 @@ function unionIds(arrA, arrB) {
   return ids;
 }
 
-// projectParticipant: true si el usuario participa en algún nodo del proyecto
-// que contiene este nodo (se calcula una vez por proyecto en mergeDataWithPermissions).
-function mergeNodeWithPermissions(existingNode, incomingNode, identifiers, isAdmin, projectParticipant) {
-  // Nodo eliminado en el payload entrante.
-  if (existingNode && !incomingNode) {
-    return canDeleteNodeServer(existingNode, identifiers, isAdmin) ? null : existingNode;
-  }
-  // Nodo nuevo (creado por el usuario).
-  if (!existingNode && incomingNode) {
-    // PARCHE: solo un admin puede crear un proyecto nuevo.
-    if (incomingNode.type === 'proyecto' && !isAdmin) return null;
-    // PARCHE: un editor puede crear actividades/tareas, pero sin poder
-    // asignarles responsables/apoyo de una — eso lo deja vacío para que
-    // un admin lo complete después.
-    return isAdmin ? incomingNode : stripAssignmentFields(incomingNode);
-  }
-  if (!existingNode && !incomingNode) return null;
+// ── FUSIÓN POR CAMBIOS ("hints") ──────────────────────────────────────────
+// El navegador informa, además del árbol, QUÉ cambió desde la última vez que
+// se sincronizó con el servidor:
+//   changed: { idDelNodo: [campos modificados] }  ('*' = nodo nuevo; '__children'
+//            = cambió el orden de sus hijos; '__parent' = cambió de padre)
+//   deleted: [ids eliminados]   trashRemoved: [claves retiradas de la papelera]
+// El servidor aplica SOLO eso sobre su versión actual. Así, un navegador con
+// datos desactualizados ya no puede borrar ni pisar lo que otras personas
+// hicieron mientras tanto. Sin "hints" (cliente antiguo) se usa el
+// comportamiento anterior.
+function arrToSet(arr) {
+  var set = {};
+  (arr || []).forEach(function (x) { set[x] = true; });
+  return set;
+}
+function normalizeHints(h) {
+  if (!h || typeof h !== 'object') return null;
+  return {
+    changed: (h.changed && typeof h.changed === 'object') ? h.changed : {},
+    deleted: arrToSet(h.deleted),
+    trashRemoved: arrToSet(h.trashRemoved),
+    replaceAll: !!h.replaceAll
+  };
+}
+function fieldChanged(list, key) {
+  return !!list && (list.indexOf('*') !== -1 || list.indexOf(key) !== -1);
+}
+function indexAllNodes(nodes, map) {
+  (nodes || []).forEach(function (n) { map[n.id] = n; indexAllNodes(n.children, map); });
+  return map;
+}
+function collectIds(nodes, set) {
+  (nodes || []).forEach(function (n) { set[n.id] = true; collectIds(n.children, set); });
+  return set;
+}
+function stripAssignmentsDeep(node) {
+  var clean = stripAssignmentFields(node);
+  clean.children = (node.children || []).map(stripAssignmentsDeep);
+  return clean;
+}
+function canMoveServer(node, ctx) {
+  return ctx.isAdmin || canModifyNodeServer(node, ctx.identifiers, false);
+}
 
-  // Ambos existen: se copian los campos propios solo si el usuario puede
-  // modificar el nodo; si no puede, se conserva la versión ya guardada tal
-  // cual (evita que alguien sin permiso altere nombre, fechas, estado, etc.
-  // de un nodo ajeno).
-  var canModify = canModifyNodeServer(existingNode, identifiers, isAdmin);
-  var merged = {};
-  for (var key in existingNode) merged[key] = existingNode[key];
-  // PARCHE: quien participa en el proyecto (pero no en esta tarea/hito) solo
-  // puede cambiar su ESTADO; cualquier otro campo entrante se ignora.
-  if (!canModify && projectParticipant && (existingNode.type === 'tarea' || existingNode.type === 'hito')) {
-    if (incomingNode.status !== undefined) merged.status = incomingNode.status;
-    if (incomingNode.updatedAt !== undefined) merged.updatedAt = incomingNode.updatedAt;
+// Un nodo que existe en el servidor y ya no aparece bajo este padre en lo enviado.
+function resolveMissingNode(existingNode, ctx) {
+  if (!ctx.hints) {
+    return canDeleteNodeServer(existingNode, ctx.identifiers, ctx.isAdmin) ? null : existingNode;
   }
-  if (canModify) {
-    for (var key2 in incomingNode) {
-      if (key2 === 'children') continue;
-      // PARCHE: aunque el usuario pueda modificar el nodo, si no es admin
-      // no se le acepta ningún cambio a quién está asignado.
-      if (!isAdmin && ASSIGNMENT_FIELDS.indexOf(key2) !== -1) continue;
-      merged[key2] = incomingNode[key2];
+  if (ctx.inIds[existingNode.id]) {
+    // sigue existiendo en otra parte del árbol enviado: se movió de padre
+    return canMoveServer(existingNode, ctx) ? null : existingNode;
+  }
+  if (ctx.hints.deleted[existingNode.id]) {
+    return canDeleteNodeServer(existingNode, ctx.identifiers, ctx.isAdmin) ? null : existingNode;
+  }
+  return existingNode; // el navegador no lo conocía (lo creó otra persona): se conserva
+}
+
+// projectParticipant: true si el usuario participa en algún nodo del proyecto que
+// contiene este nodo (se calcula una vez por proyecto en mergeDataWithPermissions).
+function mergeNodeWithPermissions(existingNode, incomingNode, ctx, projectParticipant) {
+  var identifiers = ctx.identifiers, isAdmin = ctx.isAdmin, hints = ctx.hints;
+  if (!existingNode && !incomingNode) return null;
+  if (existingNode && !incomingNode) return resolveMissingNode(existingNode, ctx);
+
+  if (!existingNode && incomingNode) {
+    var elsewhere = ctx.exAll[incomingNode.id];
+    if (elsewhere) {
+      // El nodo ya existía bajo otro padre: es un movimiento, no una creación.
+      if (!canMoveServer(elsewhere, ctx)) return null;
+      existingNode = elsewhere;
+    } else {
+      // Nodo nuevo. Solo un admin crea proyectos; un editor puede crear
+      // actividades/tareas/hitos, pero sin asignar personas (lo hace un admin).
+      if (incomingNode.type === 'proyecto' && !isAdmin) return null;
+      return isAdmin ? incomingNode : stripAssignmentsDeep(incomingNode);
     }
   }
 
+  // Ambos existen: se copian los campos propios solo si el usuario puede
+  // modificar el nodo; si no puede, se conserva la versión ya guardada tal
+  // cual. Con "hints" solo se copian los campos que el navegador dice haber
+  // cambiado.
+  var fields = hints ? ((hints.changed || {})[existingNode.id] || []) : null;
+  var canModify = canModifyNodeServer(existingNode, identifiers, isAdmin);
+  var merged = {};
+  for (var key in existingNode) merged[key] = existingNode[key];
+
+  if (canModify) {
+    for (var key2 in incomingNode) {
+      if (key2 === 'children') continue;
+      // aunque pueda modificar el nodo, un no-admin no cambia quién está asignado
+      if (!isAdmin && ASSIGNMENT_FIELDS.indexOf(key2) !== -1) continue;
+      if (hints && !fieldChanged(fields, key2)) continue;
+      merged[key2] = incomingNode[key2];
+    }
+    if (hints) {
+      // campos que el navegador eliminó del nodo
+      fields.forEach(function (f) {
+        if (f === '*' || f.indexOf('__') === 0 || f === 'children') return;
+        if (!isAdmin && ASSIGNMENT_FIELDS.indexOf(f) !== -1) return;
+        if (!(f in incomingNode)) delete merged[f];
+      });
+    }
+  } else if (projectParticipant && (existingNode.type === 'tarea' || existingNode.type === 'hito')) {
+    // quien participa en el proyecto (pero no en esta tarea/hito) solo cambia el ESTADO
+    ['status', 'updatedAt'].forEach(function (k) {
+      if (incomingNode[k] !== undefined && (!hints || fieldChanged(fields, k))) merged[k] = incomingNode[k];
+    });
+  }
+
   // Los hijos se fusionan recursivamente sin importar si el nodo padre en sí
-  // es editable, porque el permiso real de cada tarea/actividad se evalúa
-  // individualmente dentro de la recursión.
+  // es editable, porque el permiso real de cada nodo se evalúa individualmente.
   var exChildren = existingNode.children || [];
   var inChildren = incomingNode.children || [];
   var exMap = byId(exChildren);
@@ -737,12 +885,13 @@ function mergeNodeWithPermissions(existingNode, incomingNode, identifiers, isAdm
 
   var mergedChildren = [];
   ids.forEach(function (id) {
-    var mc = mergeNodeWithPermissions(exMap[id], inMap[id], identifiers, isAdmin, projectParticipant);
+    var mc = mergeNodeWithPermissions(exMap[id], inMap[id], ctx, projectParticipant);
     if (mc) mergedChildren.push(mc);
   });
 
-  // Se respeta el orden que trae el payload entrante cuando está disponible.
-  if (inChildren.length) {
+  // El orden de los hijos solo se toma del navegador si él lo cambió.
+  var orderChanged = !hints || fieldChanged(fields, '__children');
+  if (inChildren.length && orderChanged) {
     var order = inChildren.map(function (c) { return c.id; });
     mergedChildren.sort(function (a, b) {
       var ia = order.indexOf(a.id); if (ia === -1) ia = 9999;
@@ -754,11 +903,16 @@ function mergeNodeWithPermissions(existingNode, incomingNode, identifiers, isAdm
   return merged;
 }
 
-function mergeDataWithPermissions(existingData, incomingData, reqUser, role, displayName) {
+function mergeDataWithPermissions(existingData, incomingData, reqUser, role, displayName, hints) {
   var isAdmin = role === 'admin';
-  if (isAdmin) return incomingData; // el admin puede reemplazar cualquier cosa
+  // Cliente antiguo (sin hints) o restauración de respaldo: el admin reemplaza todo.
+  if (isAdmin && (!hints || hints.replaceAll)) return incomingData;
 
   var identifiers = [reqUser, displayName].filter(function (x) { return !!x; });
+  var ctx = {
+    identifiers: identifiers, isAdmin: isAdmin, hints: hints,
+    exAll: indexAllNodes(existingData, {}), inIds: collectIds(incomingData, {})
+  };
   var exMap = byId(existingData);
   var inMap = byId(incomingData);
   var ids = unionIds(existingData, incomingData);
@@ -768,30 +922,67 @@ function mergeDataWithPermissions(existingData, incomingData, reqUser, role, dis
     var exP = exMap[id];
     var inP = inMap[id];
 
-    // Proyecto eliminado por completo en el payload: solo el admin puede
-    // eliminar proyectos, así que se conserva la versión guardada.
-    if (exP && !inP) { result.push(exP); return; }
-
-    // Proyecto nuevo: PARCHE — solo un admin puede crear proyectos. Si lo
-    // intenta un editor, se descarta silenciosamente (no se crea).
-    if (!exP && inP) {
-      if (isAdmin) result.push(inP);
-      return;
-    }
-
-    // Proyecto en ambos lados: si el usuario no participa en él ni en la
-    // versión guardada ni en la enviada, se ignora cualquier cambio —
-    // protección ante un payload manipulado que toque proyectos ajenos
-    // (ahora más relevante: con "Todos los proyectos" cualquiera puede
-    // TENER a la vista un proyecto ajeno, pero seguir sin poder editarlo).
-    if (!treeParticipates(exP, identifiers) && !treeParticipates(inP, identifiers)) {
+    // Ausente en lo enviado: solo un admin elimina elementos del nivel superior.
+    if (exP && !inP) {
+      if (isAdmin && hints && !ctx.inIds[id] && hints.deleted[id]) return; // eliminado
+      if (isAdmin && hints && ctx.inIds[id]) return;                       // se movió a otro padre
       result.push(exP);
       return;
     }
-    result.push(mergeNodeWithPermissions(exP, inP, identifiers, isAdmin, treeParticipates(exP, identifiers)));
+
+    // Nuevo en el nivel superior: solo un admin (un editor no crea proyectos).
+    if (!exP && inP) {
+      if (isAdmin) {
+        var created = mergeNodeWithPermissions(null, inP, ctx, true);
+        if (created) result.push(created);
+      }
+      return;
+    }
+
+    // Proyecto en ambos lados: si el usuario no participa en él ni en la versión
+    // guardada ni en la enviada, se ignora cualquier cambio — protección ante un
+    // payload manipulado. (Todos ven todos los proyectos, pero no los editan.)
+    if (!isAdmin && !treeParticipates(exP, identifiers) && !treeParticipates(inP, identifiers)) {
+      result.push(exP);
+      return;
+    }
+    result.push(mergeNodeWithPermissions(exP, inP, ctx, isAdmin ? true : treeParticipates(exP, identifiers)));
   });
 
+  // Orden de los proyectos: solo si un admin lo cambió.
+  if (isAdmin && hints && fieldChanged((hints.changed || {})['__root'], '__children')) {
+    var order = incomingData.map(function (n) { return n.id; });
+    result.sort(function (a, b) {
+      var ia = order.indexOf(a.id); if (ia === -1) ia = 9999;
+      var ib = order.indexOf(b.id); if (ib === -1) ib = 9999;
+      return ia - ib;
+    });
+  }
   return result;
+}
+
+// Historial: se UNE lo que ya había con lo que envía el navegador (sin duplicar).
+function mergeAuditLog(existing, incoming) {
+  var seen = {}, out = [];
+  (existing || []).concat(incoming || []).forEach(function (e) {
+    var k = [e.date, e.user, e.action, e.detail].join('|');
+    if (!seen[k]) { seen[k] = true; out.push(e); }
+  });
+  out.sort(function (a, b) { return String(a.date) < String(b.date) ? -1 : (String(a.date) > String(b.date) ? 1 : 0); });
+  return out.slice(-300);
+}
+
+// Papelera: se une lo existente con lo enviado, menos lo que el navegador retiró
+// (restaurado o purgado). Clave de cada entrada: id del nodo + fecha de eliminación.
+function trashKey(t) { return ((t && t.node && t.node.id) || '') + '|' + ((t && t.deletedAt) || ''); }
+function mergeTrash(existing, incoming, removedSet) {
+  var seen = {}, out = [];
+  (existing || []).concat(incoming || []).forEach(function (t) {
+    var k = trashKey(t);
+    if (seen[k] || (removedSet && removedSet[k])) return;
+    seen[k] = true; out.push(t);
+  });
+  return out.slice(-200);
 }
 
 // ── PRESENCIA (usuarios en línea) ─────────────────────────────────────────
