@@ -204,6 +204,8 @@ tr:hover .row-add-btns{opacity:1}
 .file-badge:hover{background:var(--accent);color:#fff}
 
 /* ── MODAL ─────────────────────────────────────────── */
+#saveBanner{position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:300;max-width:min(760px,94vw);align-items:center;gap:12px;padding:10px 16px;background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);font-size:13px;line-height:1.4}
+#saveBanner i{flex-shrink:0}
 .modal-overlay{position:fixed;inset:0;background:rgba(15,35,88,.38);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(3px)}
 .modal{background:var(--surface);border-radius:var(--radius-xl);border:1px solid var(--border);padding:26px;width:540px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
 .modal h3{font-size:17px;font-weight:700;margin-bottom:18px;display:flex;align-items:center;gap:8px;letter-spacing:-.01em}
@@ -1274,6 +1276,7 @@ tr:hover .row-add-btns{opacity:1}
 </div>
 </div>
 <div id="modalContainer"></div>
+<div id="saveBanner" role="alert" style="display:none"></div>
 <div id="bulkActionBar" style="display:none;position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:10px 14px;z-index:900;align-items:center;gap:10px"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -1526,11 +1529,7 @@ async function attemptRecover() {
   if(!idf){ err.textContent='Ingresa tu correo o usuario'; err.style.display='block'; return; }
   btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Enviando...'; btn.disabled=true;
   try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'recoverPassword', email:idf, user:idf })
-    });
-    const result = await res.json();
+    const result = await apiCall({ action:'recoverPassword', email:idf, user:idf });
     if(result.status === 'success') {
       succ.textContent = result.message || 'Te enviamos una contraseña temporal a tu correo.';
       succ.style.display = 'block';
@@ -1539,7 +1538,7 @@ async function attemptRecover() {
       err.style.display = 'block';
     }
   } catch(e) {
-    err.textContent = 'Error de conexión. Intenta nuevamente.';
+    err.textContent = apiErrorText(e);
     err.style.display = 'block';
   }
   btn.innerHTML='<i class="fas fa-envelope"></i> Enviar contraseña temporal'; btn.disabled=false;
@@ -1571,11 +1570,7 @@ async function attemptChangePassword() {
   if(nw !== cf) return showErr('Las contraseñas nuevas no coinciden');
   btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Guardando...'; btn.disabled=true;
   try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'changePassword', user:currentUser, pass:cur, newPass:nw })
-    });
-    const result = await res.json();
+    const result = await apiCall({ action:'changePassword', user:currentUser, pass:cur, newPass:nw });
     if(result.status === 'success') {
       // Actualizamos la credencial en memoria. Solo tocamos localStorage si
       // el usuario ya tenía una sesión persistida (opt-in previo); si nunca
@@ -1592,7 +1587,7 @@ async function attemptChangePassword() {
       showErr(result.message || 'No se pudo actualizar la contraseña');
     }
   } catch(e) {
-    showErr('Error de conexión. Intenta nuevamente.');
+    showErr(apiErrorText(e));
   }
   if(btn){ btn.innerHTML='<i class="fas fa-save"></i> Guardar'; btn.disabled=false; }
 }
@@ -1606,19 +1601,12 @@ async function attemptLogin() {
   err.style.display='none';
   btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Verificando...'; btn.disabled=true;
   try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'login', user, pass })
-    });
-    const result = await res.json();
+    // Un reintento automático: la primera llamada a Apps Script tras un rato
+    // inactivo suele fallar o tardar ("arranque en frío").
+    const result = await apiCall({ action:'login', user, pass }, { retries:1, timeoutMs:45000 });
     if(result.status === 'success') {
       currentUser = user; currentPass = pass;
-      if(result.payload.data) data = result.payload.data;
-      if(result.payload.users) users = result.payload.users;
-      if(result.payload.teams) teams = result.payload.teams;
-      if(result.payload.trash) trash = result.payload.trash;
-      if(result.payload.auditLog) auditLog = result.payload.auditLog;
-      _lastKnownModified = result.payload.lastModified || 0;
+      adoptServerPayload(result.payload);
       const userObj = users[currentUser];
       // Normalizamos el rol (minúsculas + sin espacios) para evitar que variantes
       // como "Editor", "EDITOR" o " editor " degraden al usuario a solo lectura.
@@ -1641,7 +1629,7 @@ async function attemptLogin() {
       err.style.display = 'block';
     }
   } catch(e) {
-    err.textContent = 'Error de conexión. Intenta nuevamente.';
+    err.textContent = apiErrorText(e);
     err.style.display = 'block';
   }
   btn.innerHTML='<i class="fas fa-sign-in-alt"></i> Iniciar sesión'; btn.disabled=false;
@@ -1659,11 +1647,7 @@ async function attemptRegister() {
   err.style.display='none';
   btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Enviando...'; btn.disabled=true;
   try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'register', newUser:newuser, newPass:newpass, newEmail:newemail })
-    });
-    const result = await res.json();
+    const result = await apiCall({ action:'register', newUser:newuser, newPass:newpass, newEmail:newemail });
     if(result.status === 'success') {
       toggleAuthMode();
       const succ = document.getElementById('loginSuccess');
@@ -1675,7 +1659,7 @@ async function attemptRegister() {
       err.style.display = 'block';
     }
   } catch(e) {
-    err.textContent = 'Error de conexión.';
+    err.textContent = apiErrorText(e);
     err.style.display = 'block';
   }
   btn.innerHTML='<i class="fas fa-user-plus"></i> Enviar solicitud'; btn.disabled=false;
@@ -1730,7 +1714,7 @@ function iniciarApp() {
 // ('load'), evitando transferir y comparar todo data/users/teams en cada
 // ciclo (antes: JSON.stringify completo cada 30s + heartbeat aparte cada 20s).
 let _syncTimer = null;
-const SYNC_INTERVAL = 120000; // 120 segundos (antes 20s — ver PARCHE de rendimiento más abajo)
+const SYNC_INTERVAL = 60000; // 60 segundos (el heartbeat es liviano: lee solo emtp_meta.json)
 // PARCHE (rendimiento): cada "heartbeat" obliga al servidor a leer y convertir
 // a JSON el archivo completo de la base de datos en Drive, sin importar que
 // sea una consulta liviana. Con el tablero creciendo (más proyectos, más
@@ -1743,42 +1727,20 @@ let _lastKnownModified = 0;
 async function syncTick() {
   if(!currentUser || !currentPass) return;
   try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'heartbeat', user:currentUser, pass:currentPass })
-    });
-    const result = await res.json();
+    const result = await apiCall({ action:'heartbeat', user:currentUser, pass:currentPass }, { timeoutMs:30000 });
     if(result.status !== 'success') return;
     if(Array.isArray(result.online)) renderOnlineUsers(result.online);
 
     const remoteModified = result.lastModified || 0;
     if(remoteModified === _lastKnownModified) return; // sin cambios en los datos
-    // No refrescar datos mientras el usuario tenga un modal abierto (evita pisar su edición)
-    if(document.getElementById('modal')?.style.display !== 'none') return;
+    // Con cambios propios sin enviar, o con un formulario abierto, no se pisa nada:
+    // el guardado en curso trae el estado fresco, y el formulario se sincroniza luego.
+    if(_dirty || _saving || modalIsOpen()) return;
 
-    const loadRes = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'load', user:currentUser, pass:currentPass })
-    });
-    const loadResult = await loadRes.json();
+    const loadResult = await apiCall({ action:'load', user:currentUser, pass:currentPass }, { timeoutMs:45000 });
     if(loadResult.status !== 'success') return;
-    const incoming = loadResult.payload;
-    _lastKnownModified = remoteModified;
-    if(incoming.data)  data  = incoming.data;
-    if(incoming.users) users = incoming.users;
-    if(incoming.teams) teams = incoming.teams;
-    if(incoming.trash) trash = incoming.trash;
-    if(incoming.auditLog) auditLog = incoming.auditLog;
-    getAllNodes(data).forEach(n => {
-      if(!n.responsibles) n.responsibles=[];
-      if(!n.support) n.support=[];
-      if(!n.deps) n.deps=[];
-      if(!n.notes) n.notes='';
-      if(!n.files) n.files=[];
-      if(!n.children) n.children=[];
-    });
-    normalizeDatesInTree(data);
-    renderAll();
+    if(_dirty || _saving || modalIsOpen()) return; // cambió algo mientras se descargaba
+    reconcileWithServer(loadResult.payload);
     checkDueNotifications();
     const si = document.getElementById('lastSaved');
     if(si) { const h=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); si.textContent=`Sincronizado ${h}`; }
@@ -1790,6 +1752,10 @@ function startPolling() {
   syncTick();
   _syncTimer = setInterval(syncTick, SYNC_INTERVAL);
 }
+// Al volver a la pestaña (o recuperar la conexión) se sincroniza de inmediato, en vez
+// de esperar el siguiente ciclo: así no se trabaja sobre datos desactualizados.
+document.addEventListener('visibilitychange', () => { if(!document.hidden && currentUser) syncTick(); });
+window.addEventListener('online', () => { if(_dirty) retrySaveNow(); if(currentUser) syncTick(); });
 
 // ── NOTIFICACIONES DEL NAVEGADOR: TAREAS POR VENCER ───────────────────
 // El permiso del navegador (Notification.permission) no se puede revocar
@@ -1956,11 +1922,7 @@ window.approveUser = function(u) {
 window.removeUser = async function(u) {
   if(!confirm(`¿Eliminar al usuario ${u} permanentemente?`)) return;
   try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'removeUser', user:currentUser, pass:currentPass, targetUser:u })
-    });
-    const result = await res.json();
+    const result = await apiCall({ action:'removeUser', user:currentUser, pass:currentPass, targetUser:u });
     if(result.status === 'success') {
       delete users[u];
       openAdminUsersModal();
@@ -1969,7 +1931,7 @@ window.removeUser = async function(u) {
       showToast(result.message || 'No se pudo eliminar el usuario', 'error');
     }
   } catch(e) {
-    showToast('Error de red al eliminar el usuario', 'error');
+    showToast(apiErrorText(e), 'error');
   }
 };
 window.changeUserRole = function(u, role) {
@@ -2018,27 +1980,193 @@ window.saveEditUser = function(u) {
 };
 
 // ── COMUNICACIÓN CON LA NUBE ──────────────────────────────────────────
-async function saveData() {
-  if(!canEdit) return; // viewers no guardan
-  const si = document.getElementById('lastSaved');
-  if(si) si.textContent = '💾 Guardando...';
-  try {
-    const res = await fetch(CLOUD_API_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'save', user:currentUser, pass:currentPass, payload:{ data, users, teams, auditLog, trash } })
+class ApiError extends Error { constructor(kind, msg) { super(msg); this.kind = kind; } }
+
+// Llamada al servidor con tiempo máximo y mensajes de error que dicen QUÉ falló
+// (red, tiempo agotado o una respuesta de Google que no es del tablero).
+async function apiCall(body, opts = {}) {
+  const timeoutMs = opts.timeoutMs || 45000, retries = opts.retries || 0;
+  let lastErr;
+  for(let attempt = 0; attempt <= retries; attempt++) {
+    if(attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const res = await fetch(CLOUD_API_URL, {
+        method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify(body), signal: ctl.signal
+      });
+      const text = await res.text();
+      try { return JSON.parse(text); }
+      catch(parseErr) {
+        throw new ApiError('google', 'Google devolvió una respuesta que no es del tablero (suele ser un límite de uso o un error del servidor). Espera un minuto e inténtalo de nuevo; si persiste, avisa al administrador.');
+      }
+    } catch(e) {
+      if(e instanceof ApiError) lastErr = e;
+      else if(e && e.name === 'AbortError') lastErr = new ApiError('timeout', 'El servidor tardó demasiado en responder. Inténtalo nuevamente en unos instantes.');
+      else lastErr = new ApiError('network', 'No se pudo contactar al servidor. Revisa tu conexión a internet; si estás en una red institucional, puede estar bloqueando script.google.com.');
+    } finally { clearTimeout(timer); }
+  }
+  throw lastErr;
+}
+function apiErrorText(e) {
+  if(e instanceof ApiError) return e.message;
+  console.error(e);
+  return 'El servidor respondió, pero el tablero no pudo mostrar los datos (' + ((e && e.message) || e) + '). Recarga la página con Ctrl+F5.';
+}
+function modalIsOpen() { return !!document.querySelector('#modalContainer .modal-overlay'); }
+
+// <sync-core>
+// Instantánea del árbol: por cada nodo, el JSON de cada campo (sin hijos), el orden
+// de sus hijos y su padre. Sirve para saber QUÉ cambió desde la última sincronización.
+function snapshotTree(nodes) {
+  const map = {};
+  const walk = (list, parentId) => {
+    (list || []).forEach(n => {
+      const o = {};
+      Object.keys(n).forEach(k => { if(k !== 'children') o[k] = JSON.stringify(n[k]); });
+      o.__children = JSON.stringify((n.children || []).map(c => c.id));
+      o.__parent = parentId;
+      map[n.id] = o;
+      walk(n.children, n.id);
     });
-    const rd = await res.json();
+  };
+  map['__root'] = { __children: JSON.stringify((nodes || []).map(c => c.id)), __parent: '' };
+  walk(nodes, '');
+  return map;
+}
+function diffSnapshots(base, cur) {
+  const changed = {}, deleted = [];
+  Object.keys(cur).forEach(id => {
+    const b = base[id], c = cur[id];
+    if(!b) { changed[id] = ['*']; return; }
+    const list = [];
+    new Set([...Object.keys(b), ...Object.keys(c)]).forEach(k => { if(b[k] !== c[k]) list.push(k); });
+    if(list.length) changed[id] = list;
+  });
+  Object.keys(base).forEach(id => { if(!cur[id]) deleted.push(id); });
+  return { changed, deleted };
+}
+function snapshotsEqual(a, b) {
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if(ka.length !== kb.length) return false;
+  for(const id of ka) {
+    const x = a[id], y = b[id];
+    if(!y) return false;
+    const fx = Object.keys(x), fy = Object.keys(y);
+    if(fx.length !== fy.length) return false;
+    for(const k of fx) if(x[k] !== y[k]) return false;
+  }
+  return true;
+}
+function trashKeyOf(t) { return ((t && t.node && t.node.id) || '') + '|' + ((t && t.deletedAt) || ''); }
+// </sync-core>
+
+let _snap = null;            // instantánea de lo último que el servidor confirmó
+let _trashBase = new Set();
+function takeBaseSnapshot() { _snap = snapshotTree(data); _trashBase = new Set((trash || []).map(trashKeyOf)); }
+
+// Adopta el estado que entrega el servidor (login, sincronización, guardado).
+function adoptServerPayload(p) {
+  if(p.data)  data  = p.data;
+  if(p.users) users = p.users;
+  if(p.teams) teams = p.teams;
+  if(p.trash) trash = p.trash;
+  if(p.auditLog && (isAdmin || !auditLog.length)) auditLog = p.auditLog;
+  _lastKnownModified = p.lastModified || 0;
+  getAllNodes(data).forEach(n => {
+    if(!n.responsibles) n.responsibles=[];
+    if(!n.support) n.support=[];
+    if(!n.deps) n.deps=[];
+    if(!n.notes) n.notes='';
+    if(!n.files) n.files=[];
+    if(!n.children) n.children=[];
+  });
+  normalizeDatesInTree(data);
+  takeBaseSnapshot();
+}
+// Igual que adoptServerPayload, pero solo vuelve a dibujar (y reemplaza el árbol) si
+// el servidor tiene algo distinto a lo que se ve. Devuelve true si hubo cambios.
+function reconcileWithServer(p) {
+  const srv = snapshotTree(p.data || []);
+  if(snapshotsEqual(snapshotTree(data), srv)) {
+    if(p.users) users = p.users;
+    if(p.teams) teams = p.teams;
+    if(p.trash) trash = p.trash;
+    if(p.auditLog && isAdmin) auditLog = p.auditLog;
+    _lastKnownModified = p.lastModified || 0;
+    _snap = srv; _trashBase = new Set((trash || []).map(trashKeyOf));
+    return false;
+  }
+  adoptServerPayload(p);
+  renderAll();
+  return true;
+}
+
+// ── COLA DE GUARDADO ──
+// saveData() solo marca que hay cambios; el envío se agrupa (0,5 s), va de a uno a
+// la vez y se reintenta con espera creciente si falla. Los cambios no se pierden
+// mientras la pestaña siga abierta, y si el guardado falla se avisa con un banner.
+let _dirty = false, _saving = false, _saveTimer = null, _saveFails = 0, _forceReplace = false;
+function saveData() {
+  if(!canEdit) return; // viewers no guardan
+  _dirty = true;
+  setSaveStatus('pending');
+  if(_saveFails === 0) { clearTimeout(_saveTimer); _saveTimer = setTimeout(flushSave, 500); }
+}
+function retrySaveNow() { clearTimeout(_saveTimer); _dirty = true; flushSave(); }
+
+async function flushSave() {
+  if(_saving || !_dirty || !currentUser) return;
+  clearTimeout(_saveTimer);
+  _saving = true; _dirty = false;
+  const forceReplace = _forceReplace; _forceReplace = false;
+  const cur = snapshotTree(data);
+  const trashNow = new Set((trash || []).map(trashKeyOf));
+  let hints;
+  if(_snap) {
+    const d = diffSnapshots(_snap, cur);
+    hints = { changed:d.changed, deleted:d.deleted, trashRemoved:[..._trashBase].filter(k => !trashNow.has(k)), replaceAll:forceReplace };
+  }
+  setSaveStatus('saving');
+  let retry = false;
+  try {
+    const rd = await apiCall({ action:'save', user:currentUser, pass:currentPass, payload:{ data, users, teams, auditLog, trash, hints } }, { timeoutMs:60000 });
     if(rd.status === 'success') {
-      const hora = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-      if(si) si.textContent = `Guardado ${hora}`;
-      if(rd.lastModified) _lastKnownModified = rd.lastModified; // evita re-fetch innecesario de nuestro propio guardado
+      _saveFails = 0; hideSaveBanner();
+      _snap = cur; _trashBase = trashNow;
+      setSaveStatus('saved');
+      // Estado ya fusionado por el servidor (incluye lo de otras personas).
+      if(rd.payload && !_dirty && !modalIsOpen()) reconcileWithServer(rd.payload);
+    } else if(rd.retry) {
+      retry = true; _saveFails++; showSaveBanner(rd.message || 'El servidor está ocupado.', true); setSaveStatus('error');
     } else {
-      if(si) si.textContent = `❌ ${rd.message}`;
+      _saveFails = 0; setSaveStatus('error', rd.message);
+      showSaveBanner('No se pudo guardar: ' + (rd.message || 'error desconocido') + '. Tus cambios siguen en pantalla pero NO están en el servidor. Recarga la página para volver a la versión guardada.', false);
     }
   } catch(e) {
-    if(si) si.textContent = '❌ Error de red';
+    retry = true; _saveFails++; setSaveStatus('error');
+    showSaveBanner(e.message, true);
+  } finally { _saving = false; }
+  if(retry) _dirty = true; // no llegó: se reenvía (el diff se vuelve a calcular contra la última base confirmada)
+  if(_dirty) {
+    const delay = _saveFails ? Math.min(30000, 2000 * Math.pow(2, _saveFails - 1)) : 300;
+    clearTimeout(_saveTimer); _saveTimer = setTimeout(flushSave, delay);
   }
 }
+function setSaveStatus(state, msg) {
+  const si = document.getElementById('lastSaved'); if(!si) return;
+  if(state === 'pending' || state === 'saving') si.textContent = '💾 Guardando...';
+  else if(state === 'saved') si.textContent = 'Guardado ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  else si.textContent = '❌ ' + (msg || 'Sin guardar');
+}
+function showSaveBanner(msg, retrying) {
+  const el = document.getElementById('saveBanner'); if(!el) return;
+  el.innerHTML = `<i class="fas fa-triangle-exclamation"></i><span>${esc(msg)}${retrying ? ' <b>Reintentando automáticamente; no cierres esta pestaña.</b>' : ''}</span>${retrying ? '<button class="btn btn-ghost btn-sm" onclick="retrySaveNow()">Reintentar ahora</button>' : ''}`;
+  el.style.display = 'flex';
+}
+function hideSaveBanner() { const el = document.getElementById('saveBanner'); if(el) el.style.display = 'none'; }
+window.addEventListener('beforeunload', e => { if(_dirty || _saving) { e.preventDefault(); e.returnValue = ''; } });
 
 async function loadFilesFromDrive() {
   try {
@@ -4893,6 +5021,7 @@ function importBackup(input) {
     users = parsed.users || users;
     teams = parsed.teams || {};
     auditLog = parsed.auditLog || [];
+    _forceReplace = true;
     addAudit('restore', `Restauró un respaldo${parsed.exportedAt?` del ${new Date(parsed.exportedAt).toLocaleString('es-CL')}`:''}`);
     saveData();
     renderAll();
@@ -5008,24 +5137,19 @@ document.getElementById('loginScreen').style.display='flex';
     if(saved.users) users = saved.users;
     if(saved.teams) teams = saved.teams;
     if(saved.trash) trash = saved.trash;
+    takeBaseSnapshot();
     const userObj = users[currentUser];
     currentRole = userObj ? normalizeRole(userObj.role) : 'viewer';
     isAdmin  = currentRole === 'admin';
     canEdit  = currentRole === 'admin' || currentRole === 'editor';
     iniciarApp();
     // Refresco silencioso en segundo plano: valida credenciales y actualiza datos.
-    fetch(CLOUD_API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'login', user:saved.user, pass:saved.pass }) })
-      .then(r=>r.json()).then(result=>{
+    apiCall({ action:'login', user:saved.user, pass:saved.pass }, { retries:1 })
+      .then(result=>{
         if(result.status !== 'success'){ logout(); return; }
-        if(result.payload.data)  data  = result.payload.data;
-        if(result.payload.users) users = result.payload.users;
-        if(result.payload.teams) teams = result.payload.teams;
-        if(result.payload.trash) trash = result.payload.trash;
-        if(result.payload.auditLog) auditLog = result.payload.auditLog;
-        _lastKnownModified = result.payload.lastModified || 0;
+        // Si ya hay cambios sin enviar, no se pisan: el guardado traerá el estado fresco.
+        if(!_dirty && !_saving) reconcileWithServer(result.payload);
         try { localStorage.setItem('emtp_session', JSON.stringify({ user:saved.user, pass:saved.pass, data, users, teams, trash, savedAt:saved.savedAt })); } catch(e){}
-        renderAll();
       }).catch(()=>{}); // si no hay red, seguimos con los datos en caché
   } catch(e){}
 })();
